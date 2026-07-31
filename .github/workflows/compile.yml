@@ -1,71 +1,50 @@
 name: Compilar Kernel Moto G30
 
 on:
-  workflow_dispatch: # Permite iniciar a compilação manualmente na aba Actions
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04 # Ubuntu 20.04 é ideal para suportar o GCC 4.9 legado
+    runs-on: ubuntu-20.04
     steps:
       - name: Instalar dependências do sistema host
         run: |
           sudo apt update
           sudo apt install -y build-essential lib32z1 lib32stdc++6 git curl bc bison flex libssl-dev python3 lld
 
-      - name: Baixar o código-fonte e as ferramentas (Prebuilts)
+      - name: Baixar o código-fonte do Kernel e ferramentas essenciais
         run: |
           export my_top_dir=$HOME/moto_g30_kernel
           mkdir -vp $my_top_dir
           
-          # 1. GCC 4.9 AArch64
+          # 1. Clonar o GCC 4.9 AArch64 da Google
           mkdir -vp $my_top_dir/prebuilts/gcc/linux-x86/aarch64
           cd $my_top_dir/prebuilts/gcc/linux-x86/aarch64
           git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 --depth=1
 
-          # 2. GCC 4.8 ARM 32-bit
-          mkdir -vp $my_top_dir/prebuilts/gcc/linux-x86/arm
-          cd $my_top_dir/prebuilts/gcc/linux-x86/arm
-          git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8 --depth=1
-
-          # 3. Clang do Google
-          mkdir -vp $my_top_dir/prebuilts/clang/host/linux-x86
-          cd $my_top_dir/prebuilts/clang/host/linux-x86
-          git clone https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 --depth=1
-
-          # 4. GLIBC Host Tools
-          mkdir -vp $my_top_dir/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
-          cd $my_top_dir/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
-          git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8 --depth=1
-
-          # 5. Baixar o código do kernel da Motorola
+          # 2. Baixar o código do kernel da Motorola (branch correta)
           cd $my_top_dir
           git clone --depth 1 --branch MMI-RRCS31.Q1-3-56-2 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel
 
-      - name: Executar script de compilação do Kernel
+      - name: Executar configuração e compilação inicial
         run: |
           export my_top_dir=$HOME/moto_g30_kernel
           cd $my_top_dir
           
-          # Definir diretórios e variáveis exatamente como no script oficial
           kernel_out_dir=$my_top_dir/out/target/product/generic/obj/kernel/msm-4.19
-          kernel_obj_out_dir=$my_top_dir/out/target/product/generic/obj/KERNEL_OBJ
           aarch64_linux_android_=$my_top_dir/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-
-          x86_64_linux_ar=$my_top_dir/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/bin/x86_64-linux-ar
-          x86_64_linux_ld=$my_top_dir/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/bin/x86_64-linux-ld
-          clang=$my_top_dir/prebuilts/clang/host/linux-x86/clang-r383902b/bin/clang
-          arm_eabi_=$my_top_dir/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8/bin/arm-eabi-
 
           mkdir -p $kernel_out_dir
 
-          # Unir arquivos de configuração
+          # Unir arquivos de configuração do Bengal / Moto G30
           cat kernel/msm-4.19/arch/arm64/configs/vendor/bengal-perf_defconfig \
               kernel/msm-4.19/arch/arm64/configs/vendor/ext_config/moto-bengal.config \
               kernel/msm-4.19/arch/arm64/configs/vendor/ext_config/caprip-default.config \
               kernel/msm-4.19/arch/arm64/configs/vendor/debugfs.config >> $kernel_out_dir/.config
 
-          # Rodar defconfig
-          make -j2 -C kernel/msm-4.19 O=$kernel_out_dir DTC_EXT=dtc DTC_OVERLAY_TEST_EXT=ufdt_apply_overlay CONFIG_BUILD_ARM64_DT_OVERLAY=y HOSTCC=$clang HOSTAR=$x86_64_linux_ar HOSTLD=$x86_64_linux_ld ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_ CLANG_TRIPLE=aarch64-linux-gnu- defoldconfig
-
-          # Compilar o Kernel principal
-          make -j2 -C kernel/msm-4.19 ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_ 'HOSTCFLAGS=-I$my_top_dir/kernel/msm-4.19/include/uapi -I/usr/include -I/usr/include/x86_64-linux-gnu -L/usr/lib -L/usr/lib/x86_64-linux-gnu -fuse-ld=lld' 'HOSTLDFLAGS=-L/usr/lib -L/usr/lib/x86_64-linux-gnu -fuse-ld=lld' O=$kernel_out_dir REAL_CC=$my_top_dir/vendor/qcom/proprietary/llvm-arm-toolchain-ship/10.0/bin/clang CLANG_TRIPLE=aarch64-linux-gnu- DTC_EXT=dtc DTC_OVERLAY_TEST_EXT=ufdt_apply_overlay CONFIG_BUILD_ARM64_DT_OVERLAY=y HOSTCC=$clang HOSTAR=$x86_64_linux_ar HOSTLD=$x86_64_linux_ld
+          # Rodar defconfig básico utilizando o cross-compiler GCC 4.9
+          make -j2 -C kernel/msm-4.19 O=$kernel_out_dir ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_ defconfig
           
+          # Iniciar o build básico do kernel
+          make -j2 -C kernel/msm-4.19 O=$kernel_out_dir ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_
+        
