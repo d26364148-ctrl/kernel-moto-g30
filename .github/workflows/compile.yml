@@ -11,7 +11,7 @@ jobs:
     - name: Instalar Dependencias
       run: |
         sudo apt-get update
-        sudo apt-get install -y bc build-essential libncurses5-dev libssl-dev xz-utils git bison flex libelf-dev clang lld
+        sudo apt-get install -y bc build-essential libncurses5-dev libssl-dev xz-utils git bison flex libelf-dev clang lld wget
 
     - name: Clonar Repositorio
       uses: actions/checkout@v4
@@ -23,18 +23,27 @@ jobs:
         mkdir -p prebuilts/clang/host/linux-x86
         mkdir -p prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
 
+        # Downloads das toolchains GCC oficiais usando links diretos
         git clone --depth=1 https://googlesource.com prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9
         git clone --depth=1 https://googlesource.com prebuilts/gcc/linux-x86/arm/arm-eabi-4.8
-        git clone --depth=1 https://googlesource.com prebuilts/clang/host/linux-x86
         git clone --depth=1 https://googlesource.com prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
+
+        # Baixa a pasta exata do Clang via API estável do Google Source para não dar erro 128
+        cd prebuilts/clang/host/linux-x86
+        wget https://googlesource.com || wget https://googlesource.com
+        mkdir -p clang-r383902b
+        tar -xzf clang-r383902b.tar.gz -C clang-r383902b
+        rm -f clang-r383902b.tar.gz
 
     - name: Estruturar Pasta da Motorola
       run: |
+        cd $GITHUB_WORKSPACE
         mkdir -p kernel
         mv "Kernel Moto G30" kernel/msm-4.19
 
     - name: Compilar Kernel
       run: |
+        cd $GITHUB_WORKSPACE
         export my_top_dir=$GITHUB_WORKSPACE
         mkdir -p out/target/product/generic/obj/kernel/msm-4.19 
         kernel_out_dir=out/target/product/generic/obj/kernel/msm-4.19 
