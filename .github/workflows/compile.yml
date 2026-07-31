@@ -15,7 +15,6 @@ jobs:
 
     - name: Configurar senha do terminal (Usuario Correto)
       run: |
-        # Alterado para 'runner', que e o usuario real do GitHub Actions
         echo "runner:MotoG30Kernel" | sudo chpasswd
         sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/g' /etc/ssh/sshd_config
         sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
@@ -27,16 +26,16 @@ jobs:
         echo "AGUARDE ALGUNS SEGUNDOS ATÉ O SERVEO GERAR O SEU LINK..."
         echo "=========================================================="
         
-        # Roda o Serveo em segundo plano e salva o link em um arquivo de texto
-        ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -R 22:localhost:22 serveo.net > serveo.log 2>&1 &
+        # CORREÇÃO AQUI: Mudado de 22:localhost:22 para 80:localhost:22
+        ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -R 80:localhost:22 serveo.net > serveo.log 2>&1 &
         
-        # Aguarda 5 segundos para o link ser gerado e exibe no console
-        sleep 5
+        # Aumentado para 8 segundos para dar tempo do link estabilizar
+        sleep 8
         cat serveo.log
         echo "=========================================================="
         echo "Senha para conexao: MotoG30Kernel"
         echo "=========================================================="
         
-        # Mantém a máquina ligada por 6 horas para você trabalhar
+        # Mantém o GitHub Actions vivo por 6 horas para você compilar o kernel
         sleep 21600
         
