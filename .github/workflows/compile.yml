@@ -1,63 +1,34 @@
-name: Compilar Kernel Moto G30
+name: Compilar Kernel Moto G30 (via Serveo)
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-kernel:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Instalar Dependencias
+    - name: Instalar ferramentas do Android e dependencias
       run: |
         sudo apt-get update
-        sudo apt-get install -y bc build-essential libncurses5-dev libssl-dev xz-utils git bison flex libelf-dev clang lld wget
+        sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev bc git ccache zip unzip clang lld llvm
 
-    - name: Clonar Repositorio
-      uses: actions/checkout@v4
-
-    - name: Baixar Toolchains do Android
+    - name: Configurar senha do terminal
       run: |
-        mkdir -p prebuilts/gcc/linux-x86/aarch64
-        mkdir -p prebuilts/gcc/linux-x86/arm
-        mkdir -p prebuilts/clang/host/linux-x86
-        mkdir -p prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
+        echo "runneradmin:MotoG30Kernel" | sudo chpasswd
+        sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+        sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+        sudo systemctl restart ssh
 
-        # Links 100% completos do Android Git para não dar erro
-        git clone --depth=1 https://googlesource.com prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9
-        git clone --depth=1 https://googlesource.com prebuilts/gcc/linux-x86/arm/arm-eabi-4.8
-        git clone --depth=1 https://googlesource.com prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
-
-        # Download do pacote compacto direto do Clang estável do Google
-        cd prebuilts/clang/host/linux-x86
-        wget https://googlesource.com || wget https://googlesource.com
-        mkdir -p clang-r383902b
-        tar -xzf clang-r383902b.tar.gz -C clang-r383902b
-        rm -f clang-r383902b.tar.gz
-
-    - name: Estruturar Pasta da Motorola
+    - name: Iniciar Tunel SSH via Serveo (Sem Login)
       run: |
-        cd $GITHUB_WORKSPACE
-        mkdir -p kernel
-        mv "Kernel Moto G30" kernel/msm-4.19
-
-    - name: Compilar Kernel
-      run: |
-        cd $GITHUB_WORKSPACE
-        export my_top_dir=$GITHUB_WORKSPACE
-        mkdir -p out/target/product/generic/obj/kernel/msm-4.19 
-        kernel_out_dir=out/target/product/generic/obj/kernel/msm-4.19 
+        echo "=========================================================="
+        echo "AGUARDE ALGUNS SEGUNDOS ATÉ O SERVEO GERAR O SEU LINK..."
+        echo "=========================================================="
         
-        cat kernel/msm-4.19/arch/arm64/configs/vendor/bengal-perf_defconfig \
-            kernel/msm-4.19/arch/arm64/configs/vendor/ext_config/moto-bengal.config \
-            kernel/msm-4.19/arch/arm64/configs/vendor/ext_config/caprip-default.config \
-            kernel/msm-4.19/arch/arm64/configs/vendor/debugfs.config >> $kernel_out_dir/.config 
-
-        make -C kernel/msm-4.19 O=$kernel_out_dir DTC_EXT=dtc DTC_OVERLAY_TEST_EXT=ufdt_apply_overlay CONFIG_BUILD_ARM64_DT_OVERLAY=y ARCH=arm64 CROSS_COMPILE=$my_top_dir/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android- REAL_CC=clang CLANG_TRIPLE=aarch64-linux-gnu- defoldconfig
-        make -j$(nproc) -C kernel/msm-4.19 ARCH=arm64 CROSS_COMPILE=$my_top_dir/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android- O=$kernel_out_dir REAL_CC=clang CLANG_TRIPLE=aarch64-linux-gnu-
-
-    - name: Enviar Arquivo Pronto
-      uses: actions/upload-artifact@v4
-      with:
-        name: Kernel-MotoG30-Pronto
-        path: out/target/product/generic/obj/kernel/msm-4.19/arch/arm64/boot/Image.gz-dtb
+        # Cria o túnel reverso usando o Serveo e mostra os dados na tela
+        ssh -o StrictHostKeyChecking=no -R 22:localhost:22 serveo.net 2>&1 | grep -i "Forwarding" || true
+        
+        # Mantém a máquina ligada por 6 horas para você trabalhar
+        sleep 21600
+        
