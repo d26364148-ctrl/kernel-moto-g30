@@ -124,4 +124,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Kernel-MotoG30-Pronto
-          path: ${{ github.workspace }}/Kernel-MotoG30-Completo.zi
+          path: ${{ github.workspace }}/Kernel-MotoG30-Completo.zip
