@@ -10,41 +10,43 @@ jobs:
       - name: Instalar dependências do sistema host
         run: |
           sudo apt update
-          sudo apt install -y build-essential lib32z1 lib32stdc++6 git curl bc bison flex libssl-dev python3 lld
+          sudo apt install -y build-essential lib32z1 lib32stdc++6 git curl bc bison flex libssl-dev python3 lld binutils-dev
 
-      - name: Baixar o código-fonte do Kernel e ferramentas essenciais
+      - name: Configurar Variáveis de Ambiente Globais
         run: |
-          export my_top_dir=$HOME/moto_g30_kernel
-          mkdir -vp $my_top_dir
+          echo "my_top_dir=$HOME/moto_g30_kernel" >> $GITHUB_ENV
+
+      - name: Baixar o código-fonte e as ferramentas (Prebuilts)
+        run: |
+          mkdir -vp ${{ env.my_top_dir }}
           
           # 1. Clonar o GCC 4.9 AArch64 da Google
-          mkdir -vp $my_top_dir/prebuilts/gcc/linux-x86/aarch64
-          cd $my_top_dir/prebuilts/gcc/linux-x86/aarch64
+          mkdir -vp ${{ env.my_top_dir }}/prebuilts/gcc/linux-x86/aarch64
+          cd ${{ env.my_top_dir }}/prebuilts/gcc/linux-x86/aarch64
           git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 --depth=1
 
-          # 2. Baixar o código do kernel da Motorola (branch correta)
-          cd $my_top_dir
+          # 2. Baixar o código do kernel da Motorola
+          cd ${{ env.my_top_dir }}
           git clone --depth 1 --branch MMI-RRCS31.Q1-3-56-2 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel
 
-      - name: Executar configuração e compilação inicial
+      - name: Executar configuração e compilação do Kernel
         run: |
-          export my_top_dir=$HOME/moto_g30_kernel
-          cd $my_top_dir
+          cd ${{ env.my_top_dir }}
           
-          kernel_out_dir=$my_top_dir/out/target/product/generic/obj/kernel/msm-4.19
-          aarch64_linux_android_=$my_top_dir/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-
+          kernel_out_dir="${{ env.my_top_dir }}/out/target/product/generic/obj/kernel/msm-4.19"
+          aarch64_linux_android_="${{ env.my_top_dir }}/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
 
-          mkdir -p $kernel_out_dir
+          mkdir -p "$kernel_out_dir"
 
           # Unir arquivos de configuração do Bengal / Moto G30
           cat kernel/msm-4.19/arch/arm64/configs/vendor/bengal-perf_defconfig \
               kernel/msm-4.19/arch/arm64/configs/vendor/ext_config/moto-bengal.config \
               kernel/msm-4.19/arch/arm64/configs/vendor/ext_config/caprip-default.config \
-              kernel/msm-4.19/arch/arm64/configs/vendor/debugfs.config >> $kernel_out_dir/.config
+              kernel/msm-4.19/arch/arm64/configs/vendor/debugfs.config >> "$kernel_out_dir/.config"
 
           # Rodar defconfig básico utilizando o cross-compiler GCC 4.9
-          make -j2 -C kernel/msm-4.19 O=$kernel_out_dir ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_ defconfig
+          make -j$(nproc) -C kernel/msm-4.19 O="$kernel_out_dir" ARCH=arm64 CROSS_COMPILE="$aarch64_linux_android_" defconfig
           
-          # Iniciar o build básico do kernel
-          make -j2 -C kernel/msm-4.19 O=$kernel_out_dir ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_
-        
+          # Iniciar o build completo do kernel usando todos os núcleos disponíveis (-j$(nproc))
+          make -j$(nproc) -C kernel/msm-4.19 O="$kernel_out_dir" ARCH=arm64 CROSS_COMPILE="$aarch64_linux_android_"
+          
