@@ -13,9 +13,10 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev bc git ccache zip unzip clang lld llvm
 
-    - name: Configurar senha do terminal
+    - name: Configurar senha do terminal (Usuario Correto)
       run: |
-        echo "runneradmin:MotoG30Kernel" | sudo chpasswd
+        # Alterado para 'runner', que e o usuario real do GitHub Actions
+        echo "runner:MotoG30Kernel" | sudo chpasswd
         sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/g' /etc/ssh/sshd_config
         sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
         sudo systemctl restart ssh
@@ -26,8 +27,15 @@ jobs:
         echo "AGUARDE ALGUNS SEGUNDOS ATÉ O SERVEO GERAR O SEU LINK..."
         echo "=========================================================="
         
-        # Cria o túnel reverso usando o Serveo e mostra os dados na tela
-        ssh -o StrictHostKeyChecking=no -R 22:localhost:22 serveo.net 2>&1 | grep -i "Forwarding" || true
+        # Roda o Serveo em segundo plano e salva o link em um arquivo de texto
+        ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -R 22:localhost:22 serveo.net > serveo.log 2>&1 &
+        
+        # Aguarda 5 segundos para o link ser gerado e exibe no console
+        sleep 5
+        cat serveo.log
+        echo "=========================================================="
+        echo "Senha para conexao: MotoG30Kernel"
+        echo "=========================================================="
         
         # Mantém a máquina ligada por 6 horas para você trabalhar
         sleep 21600
