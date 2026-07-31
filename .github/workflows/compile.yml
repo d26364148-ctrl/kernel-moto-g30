@@ -1,0 +1,54 @@
+name: Compilar Kernel Moto G30
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Instalar Dependencias
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bc build-essential libncurses5-dev libssl-dev xz-utils git bison flex libelf-dev clang lld
+
+    - name: Clonar Repositorio
+      uses: actions/checkout@v4
+
+    - name: Baixar Toolchains do Android
+      run: |
+        mkdir -p prebuilts/gcc/linux-x86/aarch64
+        mkdir -p prebuilts/gcc/linux-x86/arm
+        mkdir -p prebuilts/clang/host/linux-x86
+        mkdir -p prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
+
+        git clone --depth=1 https://googlesource.com prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9
+        git clone --depth=1 https://googlesource.com prebuilts/gcc/linux-x86/arm/arm-eabi-4.8
+        git clone --depth=1 https://googlesource.com prebuilts/clang/host/linux-x86
+        git clone --depth=1 https://googlesource.com prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
+
+    - name: Estruturar Pasta da Motorola
+      run: |
+        mkdir -p kernel
+        mv "Kernel Moto G30" kernel/msm-4.19
+
+    - name: Compilar Kernel
+      run: |
+        export my_top_dir=$GITHUB_WORKSPACE
+        mkdir -p out/target/product/generic/obj/kernel/msm-4.19 
+        kernel_out_dir=out/target/product/generic/obj/kernel/msm-4.19 
+        
+        cat kernel/msm-4.19/arch/arm64/configs/vendor/bengal-perf_defconfig \
+            kernel/msm-4.19/arch/arm64/configs/vendor/ext_config/moto-bengal.config \
+            kernel/msm-4.19/arch/arm64/configs/vendor/ext_config/caprip-default.config \
+            kernel/msm-4.19/arch/arm64/configs/vendor/debugfs.config >> $kernel_out_dir/.config 
+
+        make -C kernel/msm-4.19 O=$kernel_out_dir DTC_EXT=dtc DTC_OVERLAY_TEST_EXT=ufdt_apply_overlay CONFIG_BUILD_ARM64_DT_OVERLAY=y ARCH=arm64 CROSS_COMPILE=$my_top_dir/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android- REAL_CC=clang CLANG_TRIPLE=aarch64-linux-gnu- defoldconfig
+        make -j$(nproc) -C kernel/msm-4.19 ARCH=arm64 CROSS_COMPILE=$my_top_dir/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android- O=$kernel_out_dir REAL_CC=clang CLANG_TRIPLE=aarch64-linux-gnu-
+
+    - name: Enviar Arquivo Pronto
+      uses: actions/upload-artifact@v4
+      with:
+        name: Kernel-MotoG30-Pronto
+        path: out/target/product/generic/obj/kernel/msm-4.19/arch/arm64/boot/Image.gz-dtb
