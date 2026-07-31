@@ -1,56 +1,125 @@
 name: Compilar Kernel Moto G30
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Gatilho manual. Lembre-se de salvar este arquivo na branch MAIN/MASTER.
 
 jobs:
   build:
     runs-on: ubuntu-20.04
     steps:
-      - name: Instalar dependências do sistema host
+      - name: 1. Instalar dependências essenciais do Ubuntu
         run: |
           sudo apt update
-          sudo apt install -y build-essential lib32z1 lib32stdc++6 git curl bc bison flex libssl-dev python3 lld binutils-dev libelf-dev
+          sudo apt install -y build-essential lib32z1 lib32stdc++6 git curl bc bison flex libssl-dev python3 lld binutils-dev libelf-dev zip
 
-      - name: Configurar Variáveis de Ambiente Globais
+      - name: 2. Configurar Variáveis de Ambiente Globais
         run: |
           echo "my_top_dir=$HOME/moto_g30_kernel" >> $GITHUB_ENV
 
-      - name: Baixar o código-fonte e as ferramentas
+      - name: 3. Criar Pastas e Baixar Compiladores (Prebuilts)
         run: |
           mkdir -vp ${{ env.my_top_dir }}
           cd ${{ env.my_top_dir }}
           
-          # 1. Clonar apenas o estritamente necessário do GCC 64-bit (Evita estourar o HD)
-          git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 --depth=1 --single-branch prebuilts/gcc/aarch64
+          # Baixando os compiladores do Google exatamente nas pastas que o manual pede
+          mkdir -vp prebuilts/gcc/linux-x86/aarch64
+          git clone https://googlesource.com --depth=1 prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9
           
-          # 2. Clonar o GCC 32-bit (Necessário para compatibilidade no Kernel 4.19)
-          git clone https://googlesource.com --depth=1 --single-branch prebuilts/gcc/arm32
+          mkdir -vp prebuilts/gcc/linux-x86/arm
+          git clone https://googlesource.com --depth=1 prebuilts/gcc/linux-x86/arm/arm-eabi-4.8
 
-          # 3. Baixar o código do kernel da Motorola
-          git clone --depth=1 --branch MMI-RRCS31.Q1-3-56-2 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel
+          mkdir -vp prebuilts/clang/host/linux-x86
+          git clone https://googlesource.com --depth=1 prebuilts/clang/host/linux-x86
 
-      - name: Executar configuração e compilação do Kernel
+          mkdir -vp prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
+          git clone https://googlesource.com --depth=1 prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
+
+          # Baixando o código do kernel da Motorola
+          git clone --depth=1 --branch MMI-RRCS31.Q1-3-56-2 https://github.com kernel
+
+          # Baixando o utilitário AnyKernel3 para gerar o arquivo instalável no final
+          git clone https://github.com anykernel
+
+      - name: 4. Unir Configurações e Compilar o Kernel (Passo a Passo Motorola)
         run: |
           cd ${{ env.my_top_dir }}
           
-          # Definição das pastas
-          KERNEL_SRC="${{ env.my_top_dir }}/kernel"
-          OUT_DIR="${{ env.my_top_dir }}/out"
+          # Definindo os caminhos de saída conforme o site da Motorola
+          kernel_out_dir="${{ env.my_top_dir }}/out/target/product/generic/obj/kernel/msm-4.19"
+          mkdir -p "$kernel_out_dir"
           
-          # Definição dos compiladores
-          GCC64="${{ env.my_top_dir }}/prebuilts/gcc/aarch64/bin/aarch64-linux-android-"
-          GCC32="${{ env.my_top_dir }}/prebuilts/gcc/arm32/bin/arm-linux-androideabi-"
+          aarch64_linux_android_="${{ env.my_top_dir }}/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
+          x86_64_linux_ar="${{ env.my_top_dir }}/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/bin/x86_64-linux-ar"
+          x86_64_linux_ld="${{ env.my_top_dir }}/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/bin/x86_64-linux-ld"
+          
+          # Localizando a pasta interna do Clang dinamicamente para evitar caminhos quebrados
+          clang=$(find ${{ env.my_top_dir }}/prebuilts/clang/host/linux-x86/ -name "clang" | head -n 1)
 
-          mkdir -p "$OUT_DIR"
+          # Passo A: Mesclar os arquivos de configuração (defconfig) do Moto G30
+          cat kernel/msm-4.19/arch/arm64/configs/vendor/bengal-perf_defconfig \
+              kernel/msm-4.19/arch/arm64/configs/vendor/ext_config/moto-bengal.config \
+              kernel/msm-4.19/arch/arm64/configs/vendor/ext_config/caprip-default.config \
+              kernel/msm-4.19/arch/arm64/configs/vendor/debugfs.config >> "$kernel_out_dir/.config"
 
-          # Mesclar as configurações nativamente usando o script do próprio Kernel do Android
-          # Isso evita erros de formatação no arquivo de configuração final
-          ARCH=arm64 KBUILD_BUILD_HOST=GitHub-Actions KBUILD_BUILD_USER=Runner \
-          make -C "$KERNEL_SRC" O="$OUT_DIR" ARCH=arm64 CROSS_COMPILE="$GCC64" CROSS_COMPILE_ARM32="$GCC32" \
-          vendor/bengal-perf_defconfig vendor/ext_config/moto-bengal.config vendor/ext_config/caprip-default.config
+          # Parâmetros de compilação da Qualcomm/Motorola
+          FLAGS="DTC_EXT=dtc \
+                 DTC_OVERLAY_TEST_EXT=ufdt_apply_overlay \
+                 CONFIG_BUILD_ARM64_DT_OVERLAY=y \
+                 HOSTCC=$clang \
+                 HOSTAR=$x86_64_linux_ar \
+                 HOSTLD=$x86_64_linux_ld \
+                 ARCH=arm64 \
+                 CROSS_COMPILE=$aarch64_linux_android_ \
+                 REAL_CC=$clang \
+                 CLANG_TRIPLE=aarch64-linux-gnu-"
 
-          # Iniciar o build completo do kernel
-          ARCH=arm64 KBUILD_BUILD_HOST=GitHub-Actions KBUILD_BUILD_USER=Runner \
-          make -j$(nproc) -C "$KERNEL_SRC" O="$OUT_DIR" ARCH=arm64 CROSS_COMPILE="$GCC64" CROSS_COMPILE_ARM32="$GCC32"
+          # Passo B: Gerar a base de compilação
+          make -j$(nproc) -C kernel/msm-4.19 O="$kernel_out_dir" $FLAGS defconfig
+
+          # Passo C: Compilar a imagem do Kernel principal
+          make -j$(nproc) -C kernel/msm-4.19 O="$kernel_out_dir" $FLAGS \
+               'HOSTCFLAGS=-I${{ env.my_top_dir }}/kernel/msm-4.19/include/uapi -I/usr/include'
+
+      - name: 5. Compilar Módulo de Wi-Fi (WLAN Driver)
+        run: |
+          cd ${{ env.my_top_dir }}
+          kernel_out_dir="${{ env.my_top_dir }}/out/target/product/generic/obj/kernel/msm-4.19"
+          aarch64_linux_android_="${{ env.my_top_dir }}/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
+          x86_64_linux_ar="${{ env.my_top_dir }}/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/bin/x86_64-linux-ar"
+          x86_64_linux_ld="${{ env.my_top_dir }}/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/bin/x86_64-linux-ld"
+          clang=$(find ${{ env.my_top_dir }}/prebuilts/clang/host/linux-x86/ -name "clang" | head -n 1)
+
+          # Compilação isolada do driver qcacld-3.0 exigido pela Motorola
+          make -j$(nproc) -C kernel/msm-4.19 O="$kernel_out_dir" M="${{ env.my_top_dir }}/kernel/msm-4.19/vendor/qcom/opensource/wlan/qcacld-3.0" \
+               ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_ REAL_CC=$clang CLANG_TRIPLE=aarch64-linux-gnu- \
+               HOSTCC=$clang HOSTAR=$x86_64_linux_ar HOSTLD=$x86_64_linux_ld \
+               modules WLAN_ROOT=vendor/qcom/opensource/wlan/qcacld-3.0/ WLAN_COMMON_ROOT=../qca-wifi-host-cmn \
+               WLAN_COMMON_INC=vendor/qcom/opensource/wlan/qca-wifi-host-cmn WLAN_FW_API=vendor/qcom/opensource/wlan/fw-api \
+               WLAN_PROFILE=default BOARD_PLATFORM=bengal CONFIG_QCA_CLD_WLAN=m
+
+      - name: 6. Empacotar em arquivo ZIP Instalável
+        run: |
+          cd ${{ env.my_top_dir }}
+          kernel_out_dir="${{ env.my_top_dir }}/out/target/product/generic/obj/kernel/msm-4.19"
+          AK_DIR="${{ env.my_top_dir }}/anykernel"
+
+          # Copiar o Kernel gerado
+          cp "$kernel_out_dir/arch/arm64/boot/Image.gz-dtb" "$AK_DIR/Image.gz-dtb" || cp "$kernel_out_dir/arch/arm64/boot/Image.gz" "$AK_DIR/Image.gz"
+
+          # Copiar os drivers de Wi-Fi e áudio (.ko) gerados
+          mkdir -p "$AK_DIR/modules"
+          find "$kernel_out_dir" -name "*.ko" -exec cp {} "$AK_DIR/modules/" \;
+
+          # Configurar AnyKernel para aceitar o Moto G30 (caprip)
+          sed -i 's/device.name1=/device.name1=caprip/g' "$AK_DIR/anykernel.sh"
+          sed -i 's/block=\/dev\/block\/bootdevice\/by-name\/boot/block=auto/g' "$AK_DIR/anykernel.sh"
+
+          cd "$AK_DIR"
+          zip -r9 ${{ github.workspace }}/Kernel-MotoG30.zip * -x .git* README.md
+
+      - name: 7. Disponibilizar download na aba Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kernel-MotoG30-Final
+          path: ${{ github.workspace }}/Kernel-MotoG30.zip
           
