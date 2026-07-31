@@ -10,43 +10,47 @@ jobs:
       - name: Instalar dependências do sistema host
         run: |
           sudo apt update
-          sudo apt install -y build-essential lib32z1 lib32stdc++6 git curl bc bison flex libssl-dev python3 lld binutils-dev
+          sudo apt install -y build-essential lib32z1 lib32stdc++6 git curl bc bison flex libssl-dev python3 lld binutils-dev libelf-dev
 
       - name: Configurar Variáveis de Ambiente Globais
         run: |
           echo "my_top_dir=$HOME/moto_g30_kernel" >> $GITHUB_ENV
 
-      - name: Baixar o código-fonte e as ferramentas (Prebuilts)
+      - name: Baixar o código-fonte e as ferramentas
         run: |
           mkdir -vp ${{ env.my_top_dir }}
-          
-          # 1. Clonar o GCC 4.9 AArch64 da Google
-          mkdir -vp ${{ env.my_top_dir }}/prebuilts/gcc/linux-x86/aarch64
-          cd ${{ env.my_top_dir }}/prebuilts/gcc/linux-x86/aarch64
-          git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 --depth=1
-
-          # 2. Baixar o código do kernel da Motorola
           cd ${{ env.my_top_dir }}
-          git clone --depth 1 --branch MMI-RRCS31.Q1-3-56-2 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel
+          
+          # 1. Clonar apenas o estritamente necessário do GCC 64-bit (Evita estourar o HD)
+          git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 --depth=1 --single-branch prebuilts/gcc/aarch64
+          
+          # 2. Clonar o GCC 32-bit (Necessário para compatibilidade no Kernel 4.19)
+          git clone https://googlesource.com --depth=1 --single-branch prebuilts/gcc/arm32
+
+          # 3. Baixar o código do kernel da Motorola
+          git clone --depth=1 --branch MMI-RRCS31.Q1-3-56-2 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel
 
       - name: Executar configuração e compilação do Kernel
         run: |
           cd ${{ env.my_top_dir }}
           
-          kernel_out_dir="${{ env.my_top_dir }}/out/target/product/generic/obj/kernel/msm-4.19"
-          aarch64_linux_android_="${{ env.my_top_dir }}/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
-
-          mkdir -p "$kernel_out_dir"
-
-          # Unir arquivos de configuração do Bengal / Moto G30
-          cat kernel/msm-4.19/arch/arm64/configs/vendor/bengal-perf_defconfig \
-              kernel/msm-4.19/arch/arm64/configs/vendor/ext_config/moto-bengal.config \
-              kernel/msm-4.19/arch/arm64/configs/vendor/ext_config/caprip-default.config \
-              kernel/msm-4.19/arch/arm64/configs/vendor/debugfs.config >> "$kernel_out_dir/.config"
-
-          # Rodar defconfig básico utilizando o cross-compiler GCC 4.9
-          make -j$(nproc) -C kernel/msm-4.19 O="$kernel_out_dir" ARCH=arm64 CROSS_COMPILE="$aarch64_linux_android_" defconfig
+          # Definição das pastas
+          KERNEL_SRC="${{ env.my_top_dir }}/kernel"
+          OUT_DIR="${{ env.my_top_dir }}/out"
           
-          # Iniciar o build completo do kernel usando todos os núcleos disponíveis (-j$(nproc))
-          make -j$(nproc) -C kernel/msm-4.19 O="$kernel_out_dir" ARCH=arm64 CROSS_COMPILE="$aarch64_linux_android_"
+          # Definição dos compiladores
+          GCC64="${{ env.my_top_dir }}/prebuilts/gcc/aarch64/bin/aarch64-linux-android-"
+          GCC32="${{ env.my_top_dir }}/prebuilts/gcc/arm32/bin/arm-linux-androideabi-"
+
+          mkdir -p "$OUT_DIR"
+
+          # Mesclar as configurações nativamente usando o script do próprio Kernel do Android
+          # Isso evita erros de formatação no arquivo de configuração final
+          ARCH=arm64 KBUILD_BUILD_HOST=GitHub-Actions KBUILD_BUILD_USER=Runner \
+          make -C "$KERNEL_SRC" O="$OUT_DIR" ARCH=arm64 CROSS_COMPILE="$GCC64" CROSS_COMPILE_ARM32="$GCC32" \
+          vendor/bengal-perf_defconfig vendor/ext_config/moto-bengal.config vendor/ext_config/caprip-default.config
+
+          # Iniciar o build completo do kernel
+          ARCH=arm64 KBUILD_BUILD_HOST=GitHub-Actions KBUILD_BUILD_USER=Runner \
+          make -j$(nproc) -C "$KERNEL_SRC" O="$OUT_DIR" ARCH=arm64 CROSS_COMPILE="$GCC64" CROSS_COMPILE_ARM32="$GCC32"
           
