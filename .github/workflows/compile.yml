@@ -1,15 +1,10 @@
-name: Conexao SSH Direta VM (Sem Tunes)
+name: Compilar Kernel Moto G30 (via tmate)
 
 on:
   workflow_dispatch:
-    inputs:
-      meu_ip:
-        description: 'Seu IP publico atual (acesse meuip.com.br para saber)'
-        required: true
-        default: '0.0.0.0'
 
 jobs:
-  ssh-direto:
+  build-kernel:
     runs-on: ubuntu-22.04
 
     steps:
@@ -18,32 +13,8 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev bc git ccache zip unzip clang lld llvm
 
-    - name: Configurar Senha e Liberar Firewall para o seu IP
-      run: |
-        # Define a senha do usuário runner
-        echo "runner:MotoG30Kernel" | sudo chpasswd
-        
-        # Ativa autenticação por senha no SSH
-        sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/g' /etc/ssh/sshd_config
-        sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
-        sudo systemctl restart ssh
-        
-        # Abre o firewall da máquina do GitHub APENAS para o seu endereço de IP
-        sudo ufw allow from ${{ github.event.inputs.meu_ip }} to any port 22 proto tcp
-        sudo ufw --force enable
-
-    - name: Descobrir IP da VM e Aguardar Conexao
-      run: |
-        echo "=========================================================="
-        echo "IP PUBLICO DA VM DO GITHUB:"
-        curl -s https://ifconfig.me
-        echo -e "\n=========================================================="
-        echo "COMANO PARA CONECTAR NO SEU TERMINAL:"
-        echo "ssh runner@$(curl -s ifconfig.me)"
-        echo "=========================================================="
-        echo "Senha para conexao: MotoG30Kernel"
-        echo "=========================================================="
-        
-        # Mantém a máquina ligada por 6 horas aguardando você mexer
-        sleep 21600
+    - name: Iniciar Conexao SSH Segura (Sem Login)
+      uses: mxschmitt/action-tmate@v3
+      with:
+        limit-access-to-actor: false # Permite que você conecte direto do seu terminal sem precisar cadastrar chaves SSH
         
