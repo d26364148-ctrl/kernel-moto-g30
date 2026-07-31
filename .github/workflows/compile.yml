@@ -1,10 +1,15 @@
-name: Compilar Kernel Moto G30 (via Serveo)
+name: Conexao SSH Direta VM (Sem Tunes)
 
 on:
   workflow_dispatch:
+    inputs:
+      meu_ip:
+        description: 'Seu IP publico atual (acesse meuip.com.br para saber)'
+        required: true
+        default: '0.0.0.0'
 
 jobs:
-  build-kernel:
+  ssh-direto:
     runs-on: ubuntu-22.04
 
     steps:
@@ -13,29 +18,32 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev bc git ccache zip unzip clang lld llvm
 
-    - name: Configurar senha do terminal (Usuario Correto)
+    - name: Configurar Senha e Liberar Firewall para o seu IP
       run: |
+        # Define a senha do usuário runner
         echo "runner:MotoG30Kernel" | sudo chpasswd
+        
+        # Ativa autenticação por senha no SSH
         sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/g' /etc/ssh/sshd_config
         sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
         sudo systemctl restart ssh
+        
+        # Abre o firewall da máquina do GitHub APENAS para o seu endereço de IP
+        sudo ufw allow from ${{ github.event.inputs.meu_ip }} to any port 22 proto tcp
+        sudo ufw --force enable
 
-    - name: Iniciar Tunel SSH via Serveo (Sem Login)
+    - name: Descobrir IP da VM e Aguardar Conexao
       run: |
         echo "=========================================================="
-        echo "AGUARDE ALGUNS SEGUNDOS ATÉ O SERVEO GERAR O SEU LINK..."
-        echo "=========================================================="
-        
-        # CORREÇÃO AQUI: Mudado de 22:localhost:22 para 80:localhost:22
-        ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -R 80:localhost:22 serveo.net > serveo.log 2>&1 &
-        
-        # Aumentado para 8 segundos para dar tempo do link estabilizar
-        sleep 8
-        cat serveo.log
+        echo "IP PUBLICO DA VM DO GITHUB:"
+        curl -s https://ifconfig.me
+        echo -e "\n=========================================================="
+        echo "COMANO PARA CONECTAR NO SEU TERMINAL:"
+        echo "ssh runner@$(curl -s ifconfig.me)"
         echo "=========================================================="
         echo "Senha para conexao: MotoG30Kernel"
         echo "=========================================================="
         
-        # Mantém o GitHub Actions vivo por 6 horas para você compilar o kernel
+        # Mantém a máquina ligada por 6 horas aguardando você mexer
         sleep 21600
         
