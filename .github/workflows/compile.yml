@@ -23,12 +23,12 @@ jobs:
         mkdir -p prebuilts/clang/host/linux-x86
         mkdir -p prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
 
-        # Downloads das toolchains GCC oficiais usando links diretos
+        # Links 100% completos do Android Git para não dar erro
         git clone --depth=1 https://googlesource.com prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9
         git clone --depth=1 https://googlesource.com prebuilts/gcc/linux-x86/arm/arm-eabi-4.8
         git clone --depth=1 https://googlesource.com prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
 
-        # Baixa a pasta exata do Clang via API estável do Google Source para não dar erro 128
+        # Download do pacote compacto direto do Clang estável do Google
         cd prebuilts/clang/host/linux-x86
         wget https://googlesource.com || wget https://googlesource.com
         mkdir -p clang-r383902b
