@@ -19,40 +19,45 @@ jobs:
           remove-codeql: 'true'
           remove-docker-images: 'true'
 
-      - name: Install Build Dependencies
+      - name: Install Cloudflare Tunnel via APT
         run: |
+          # 1. Preparar a pasta de chaves de segurança do sistema
+          sudo mkdir -p /etc/apt/keyrings
+          
+          # 2. Baixar a chave de criptografia oficial dos servidores da Cloudflare
+          curl -fsSL https://cloudflare.com | sudo tee /etc/apt/keyrings/cloudflare-main.gpg >/dev/null
+          
+          # 3. Adicionar o repositório estável oficial (://cloudflare.com) na lista do APT do Ubuntu
+          echo "deb [signed-by=/etc/apt/keyrings/cloudflare-main.gpg] https://://cloudflare.com/cloudflared jammy main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
+          
+          # 4. Atualizar os índices de pacotes e realizar a instalação do utilitário nativo
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo5 libncurses5 lld llvm curl
+          sudo apt-get install -y cloudflared
 
-      - name: Configure SSH Server and Cloudflare Tunnel
+      - name: Configure SSH Server and Launch Tunnel
         run: |
-          # 1. Configurar uma senha padrão temporária para o usuário 'runner' na VM
+          # 1. Configurar a senha padrão para o usuário runner
           echo "runner:moto30" | sudo chpasswd
           
-          # 2. Configurar o SSHD para permitir login por senha de forma segura
-          sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+          # 2. Liberar o acesso remoto por senha no serviço do SSHD
           sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
           sudo systemctl restart ssh
           
-          # FORÇAR DIRETÓRIO: Garante que seu terminal SSH abra direto na pasta de 100GB livres
+          # 3. Forçar o terminal a abrir automaticamente na partição de 98GB livres
           echo "cd ${{ github.workspace }}" >> $HOME/.bashrc
           echo "export GITHUB_WORKSPACE=${{ github.workspace }}" >> $HOME/.bashrc
           
-          # 3. Baixar o binário puro do cloudflared (Sem usar APT e sem dar erro de repositório)
-          curl -L https://github.com -o cloudflared
-          chmod +x cloudflared
-          sudo mv cloudflared /usr/local/bin/
-          
-          # 4. Iniciar o túnel TCP gratuito apontando para a porta do SSH (22)
-          echo "=== DADOS DE CONEXÃO DO CLOUDFLARE TUNNEL ==="
+          # 4. Iniciar o túnel nativo apontando para a porta de rede local do SSH (22)
+          cd ${{ github.workspace }}
           cloudflared tunnel --url tcp://localhost:22 > cloudflare.log 2>&1 &
           
-          # Espera o túnel estabelecer a rota pública com segurança
+          # Aguarda o handshake da nuvem se estabilizar
           sleep 15
           
-          # Extrai o link temporário gerado de forma garantida no log
-          cat cloudflare.log | grep -oE "tcp://[a-zA-Z0-9.-]+\.trycloudflare\.com:[0-9]+" || cat cloudflare.log | grep -oE "https://[a-zA-Z0-9.-]+\.trycloudflare\.com" || true
-          echo "============================================="
+          # Exibe os logs limpos na interface web do GitHub Actions para você capturar o link
+          echo "=== LOG DE INICIALIZAÇÃO NATIVO DO CLOUDFLARE ==="
+          cat cloudflare.log
+          echo "================================================="
           
-          # Mantém o Job aberto por até 6 horas para você compilar o kernel com calma
+          # Mantém o contêiner e o túnel vivos por até 6 horas
           sleep 21600
