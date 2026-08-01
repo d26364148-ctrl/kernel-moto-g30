@@ -38,11 +38,10 @@ jobs:
           echo "cd ${{ github.workspace }}" >> $HOME/.bashrc
           echo "export GITHUB_WORKSPACE=${{ github.workspace }}" >> $HOME/.bashrc
           
-          # 3. Método de instalação oficial e infalível da Cloudflare via APT (Bypassa o erro do .deb)
-          sudo mkdir -p /etc/apt/keyrings
-          curl -fsSL https://cloudflare.com | sudo tee /etc/apt/keyrings/cloudflare-main.gpg >/dev/null
-          echo "deb [signed-by=/etc/apt/keyrings/cloudflare-main.gpg] https://cloudflare.com jammy main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
-          sudo apt-get update && sudo apt-get install -y cloudflared
+          # 3. Baixar o binário puro do cloudflared (Sem usar APT e sem dar erro de repositório)
+          curl -L https://github.com -o cloudflared
+          chmod +x cloudflared
+          sudo mv cloudflared /usr/local/bin/
           
           # 4. Iniciar o túnel TCP gratuito apontando para a porta do SSH (22)
           echo "=== DADOS DE CONEXÃO DO CLOUDFLARE TUNNEL ==="
