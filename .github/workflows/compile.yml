@@ -34,11 +34,9 @@ jobs:
           sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
           sudo systemctl restart ssh
           
-          # SOLUÇÃO DO ESPAÇO SEM USAR USERMOD: 
-          # Criamos a pasta de trabalho diretamente no disco de 100GB+ (/mnt/) e criamos um link na nossa Home
-          sudo mkdir -p /mnt/android_top
-          sudo chown -R runner:runner /mnt/android_top
-          ln -s /mnt/android_top $HOME/android_top
+          # FORÇAR DIRETÓRIO: Faz o terminal SSH iniciar automaticamente na pasta de 100GB livres
+          echo "cd ${{ github.workspace }}" >> $HOME/.bashrc
+          echo "export GITHUB_WORKSPACE=${{ github.workspace }}" >> $HOME/.bashrc
           
           # 3. Baixar o executável oficial do Cloudflare Tunnel
           wget -q https://github.com
@@ -46,13 +44,13 @@ jobs:
           
           # 4. Iniciar o túnel TCP gratuito apontando para a porta do SSH (22)
           echo "=== DADOS DE CONEXÃO DO CLOUDFLARE TUNNEL ==="
-          cloudflared tunnel --url tcp://localhost:22 > $HOME/cloudflare.log 2>&1 &
+          cloudflared tunnel --url tcp://localhost:22 > cloudflare.log 2>&1 &
           
           # Espera o túnel estabelecer a rota pública
           sleep 12
           
           # Extrai o link temporário gerado pelo sistema
-          cat $HOME/cloudflare.log | grep -oE "tcp://[a-zA-Z0-9.-]+\.trycloudflare\.com:[0-9]+" || cat $HOME/cloudflare.log | grep -oE "https://[a-zA-Z0-9.-]+\.trycloudflare\.com" || true
+          cat cloudflare.log | grep -oE "tcp://[a-zA-Z0-9.-]+\.trycloudflare\.com:[0-9]+" || cat cloudflare.log | grep -oE "https://[a-zA-Z0-9.-]+\.trycloudflare\.com" || true
           echo "============================================="
           
           # Mantém o Job aberto por até 6 horas para você compilar o kernel com calma
