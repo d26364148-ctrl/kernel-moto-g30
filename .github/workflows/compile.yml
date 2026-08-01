@@ -12,52 +12,32 @@ jobs:
         uses: easimon/maximize-build-space@master
         with:
           root-reserve-mb: 5120
-          swap-size-mb: 4096
+          swap-size-mb: 2048
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
           remove-codeql: 'true'
           remove-docker-images: 'true'
 
-      - name: Install Cloudflare Tunnel via APT
+      - name: Launch Cloudflare Tunnel and SSH
         run: |
-          # 1. Preparar a pasta de chaves de segurança do sistema
-          sudo mkdir -p /etc/apt/keyrings
-          
-          # 2. Baixar a chave de criptografia oficial dos servidores da Cloudflare
-          curl -fsSL https://cloudflare.com | sudo tee /etc/apt/keyrings/cloudflare-main.gpg >/dev/null
-          
-          # 3. Adicionar o repositório estável oficial (://cloudflare.com) na lista do APT do Ubuntu
-          echo "deb [signed-by=/etc/apt/keyrings/cloudflare-main.gpg] https://://cloudflare.com/cloudflared jammy main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
-          
-          # 4. Atualizar os índices de pacotes e realizar a instalação do utilitário nativo
-          sudo apt-get update
-          sudo apt-get install -y cloudflared
-
-      - name: Configure SSH Server and Launch Tunnel
-        run: |
-          # 1. Configurar a senha padrão para o usuário runner
+          # 1. Configurar senha padrão sem misturar comandos
           echo "runner:moto30" | sudo chpasswd
-          
-          # 2. Liberar o acesso remoto por senha no serviço do SSHD
           sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
           sudo systemctl restart ssh
           
-          # 3. Forçar o terminal a abrir automaticamente na partição de 98GB livres
-          echo "cd ${{ github.workspace }}" >> $HOME/.bashrc
-          echo "export GITHUB_WORKSPACE=${{ github.workspace }}" >> $HOME/.bashrc
-          
-          # 4. Iniciar o túnel nativo apontando para a porta de rede local do SSH (22)
+          # 2. Ir para a pasta de 100GB livres
           cd ${{ github.workspace }}
-          cloudflared tunnel --url tcp://localhost:22 > cloudflare.log 2>&1 &
           
-          # Aguarda o handshake da nuvem se estabilizar
+          # 3. Baixar o binário puro estável direto do servidor de produção da Cloudflare
+          curl -L https://equinox.io | tar -xz
+          chmod +x cloudflared
+          
+          # 4. Iniciar o túnel direto no espaço gigante
+          ./cloudflared tunnel --url tcp://localhost:22 > cloudflare.log 2>&1 &
           sleep 15
           
-          # Exibe os logs limpos na interface web do GitHub Actions para você capturar o link
-          echo "=== LOG DE INICIALIZAÇÃO NATIVO DO CLOUDFLARE ==="
-          cat cloudflare.log
-          echo "================================================="
-          
-          # Mantém o contêiner e o túnel vivos por até 6 horas
+          echo "=== DADOS DE CONEXÃO ==="
+          cat cloudflare.log | grep -oE "https://[a-zA-Z0-9.-]+\.trycloudflare\.com" || cat cloudflare.log
+          echo "========================"
           sleep 21600
