@@ -18,7 +18,6 @@ jobs:
           remove-haskell: 'true'
           remove-codeql: 'true'
           remove-docker-images: 'true'
-          overridden-chmod: 'false'
 
       - name: Install Build Dependencies
         run: |
@@ -27,33 +26,25 @@ jobs:
 
       - name: Configure SSH Server and Cloudflare Tunnel
         run: |
-          # 1. Configurar uma senha padrão temporária para o usuário 'runner' na VM
           echo "runner:moto30" | sudo chpasswd
           
-          # 2. Configurar o SSHD para permitir login por senha de forma segura
           sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/g' /etc/ssh/sshd_config
           sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
           sudo systemctl restart ssh
           
-          # SOLUÇÃO DO ESPAÇO: Mover a pasta HOME do usuário runner para a partição de 100GB+ montada em /mnt/
           sudo mkdir -p /mnt/runner_home
           sudo chown -R runner:runner /mnt/runner_home
           sudo usermod -d /mnt/runner_home runner
           
-          # 3. Baixar o executável oficial do Cloudflare Tunnel
-          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          wget -q https://github.com
           sudo dpkg -i cloudflared-linux-amd64.deb
           
-          # 4. Iniciar o túnel TCP gratuito apontando para a porta do SSH (22)
           echo "=== DADOS DE CONEXÃO DO CLOUDFLARE TUNNEL ==="
           cloudflared tunnel --url tcp://localhost:22 > /mnt/runner_home/cloudflare.log 2>&1 &
           
-          # Espera o túnel estabelecer a rota pública
           sleep 12
           
-          # Extrai o link temporário exclusivo gerado pelo sistema
           cat /mnt/runner_home/cloudflare.log | grep -oE "tcp://[a-zA-Z0-9.-]+\.trycloudflare\.com:[0-9]+" || cat /mnt/runner_home/cloudflare.log | grep -oE "https://[a-zA-Z0-9.-]+\.trycloudflare\.com" || true
           echo "============================================="
           
-          # Mantém o Job aberto por até 6 horas para você compilar o kernel com calma
           sleep 21600
