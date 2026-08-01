@@ -1,7 +1,7 @@
 name: Build Motorola Moto G30 Kernel
 
 on:
-  workflow_dispatch: # Permite iniciar a compilação manualmente pelo painel do GitHub
+  workflow_dispatch:
 
 jobs:
   build-kernel:
@@ -12,7 +12,7 @@ jobs:
         uses: easimon/maximize-build-space@master
         with:
           root-reserve-mb: 5120
-          swap-size-mb: 1024
+          swap-size-mb: 2048
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
@@ -21,7 +21,7 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo5 libncurses5
+          sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo5 libncurses5 lld llvm
 
       - name: Set Up Environment Variables
         run: |
@@ -29,38 +29,32 @@ jobs:
 
       - name: Download Prebuilts and Tools
         run: |
-          mkdir -vp $MY_TOP_DIR/prebuilts/gcc/linux-x86/aarch64
+          # Toolchains GCC padrões do ecossistema Android
           git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 $MY_TOP_DIR/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9
-
-          mkdir -vp $MY_TOP_DIR/prebuilts/gcc/linux-x86/arm
           git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8 $MY_TOP_DIR/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8
-
-          mkdir -vp $MY_TOP_DIR/prebuilts/clang/host/linux-x86
-          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 $MY_TOP_DIR/prebuilts/clang/host/linux-x86
-
-          mkdir -vp $MY_TOP_DIR/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
           git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8 $MY_TOP_DIR/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
-
-          # Clonar ferramentas adicionais se necessárias (build-tools)
-          mkdir -vp $MY_TOP_DIR/prebuilts/build-tools
+          
+          # Repositório de build-tools correto contendo o binário do 'make' customizado
           git clone --depth=1 https://googlesource.com $MY_TOP_DIR/prebuilts/build-tools
+          
+          # Clang específico exigido pelo arquivo de configuração (versão r383902b)
+          mkdir -vp $MY_TOP_DIR/prebuilts/clang/host/linux-x86
+          git clone --depth=1 https://googlesource.com $MY_TOP_DIR/prebuilts/clang/host/linux-x86/clang-r383902b
 
       - name: Download Kernel Source Code
         run: |
-          # NOTA: Substitua a URL abaixo pela URL real do seu repositório de kernel ou use a oficial da Motorola
-          mkdir -vp $MY_TOP_DIR/kernel/msm-4.19
+          # Utiliza a fonte oficial da Motorola Mobility para o Moto G30 (mms-4.19 / capri)
           git clone --depth=1 https://github.com -b MMI-RRCS31.Q1-3-56-2 $MY_TOP_DIR/kernel/msm-4.19
 
       - name: Download Proprietary Components (Qualcomm LLVM & WLAN)
         run: |
-          # NOTA: Ajuste estas URLs para os repositórios onde você guardou a toolchain proprietária e o driver WLAN
-          mkdir -vp $MY_TOP_DIR/vendor/qcom/proprietary/llvm-arm-toolchain-ship/10.0
+          # Toolchain Qualcomm LLVM versão 10.0 (Essencial para kernels OEM Qualcomm antigos)
           git clone --depth=1 https://github.com $MY_TOP_DIR/vendor/qcom/proprietary/llvm-arm-toolchain-ship/10.0
-
-          mkdir -vp $MY_TOP_DIR/vendor/qcom/opensource/wlan
-          git clone --depth=1 https://github.com $MY_TOP_DIR/vendor/qcom/opensource/wlan/qcacld-3.0
-          git clone --depth=1 https://github.com $MY_TOP_DIR/vendor/qcom/opensource/wlan/qca-wifi-host-cmn
-          git clone --depth=1 https://github.com $MY_TOP_DIR/vendor/qcom/opensource/wlan/fw-api
+          
+          # Drivers oficiais de Wifi Qualcomm (qcacld-3.0) adaptados para o bengal/capri
+          git clone --depth=1 https://github.com -b MMI-RRCS31.Q1-3-56-2 $MY_TOP_DIR/vendor/qcom/opensource/wlan/qcacld-3.0
+          git clone --depth=1 https://github.com -b MMI-RRCS31.Q1-3-56-2 $MY_TOP_DIR/vendor/qcom/opensource/wlan/qca-wifi-host-cmn
+          git clone --depth=1 https://github.com -b MMI-RRCS31.Q1-3-56-2 $MY_TOP_DIR/vendor/qcom/opensource/wlan/fw-api
 
       - name: Build Kernel
         run: |
@@ -70,27 +64,27 @@ jobs:
           kernel_out_dir=$MY_TOP_DIR/out/target/product/generic/obj/kernel/msm-4.19 
           kernel_obj_out_dir=$MY_TOP_DIR/out/target/product/generic/obj/KERNEL_OBJ 
           
-          make=$MY_TOP_DIR/prebuilts/build-tools/linux-x86/bin/make
+          make_bin=$MY_TOP_DIR/prebuilts/build-tools/linux-x86/bin/make
           aarch64_linux_android_=$MY_TOP_DIR/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-
           x86_64_linux_ar=$MY_TOP_DIR/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/bin/x86_64-linux-ar
           x86_64_linux_ld=$MY_TOP_DIR/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/bin/x86_64-linux-ld
           clang=$MY_TOP_DIR/prebuilts/clang/host/linux-x86/clang-r383902b/bin/clang
           arm_eabi_=$MY_TOP_DIR/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8/bin/arm-eabi- 
           
+          # Junta as configurações específicas exigidas pela Motorola
           cat kernel/msm-4.19/arch/arm64/configs/vendor/bengal-perf_defconfig kernel/msm-4.19/arch/arm64/configs/vendor/ext_config/moto-bengal.config kernel/msm-4.19/arch/arm64/configs/vendor/ext_config/caprip-default.config kernel/msm-4.19/arch/arm64/configs/vendor/debugfs.config >> $kernel_out_dir/.config 
           
-          # Caso o utilitário nativo falhe, usamos a variável $make adaptada
-          make -j$(nproc) -C kernel/msm-4.19 O=$kernel_out_dir DTC_EXT=dtc DTC_OVERLAY_TEST_EXT=ufdt_apply_overlay CONFIG_BUILD_ARM64_DT_OVERLAY=y HOSTCC=$clang HOSTAR=$x86_64_linux_ar HOSTLD=$x86_64_linux_ld ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_ REAL_CC=$MY_TOP_DIR/vendor/qcom/proprietary/llvm-arm-toolchain-ship/10.0/bin/clang CLANG_TRIPLE=aarch64-linux-gnu- defoldconfig
+          # Geração da defconfig inicial
+          $make_bin -j$(nproc) -C kernel/msm-4.19 O=$kernel_out_dir DTC_EXT=dtc DTC_OVERLAY_TEST_EXT=ufdt_apply_overlay CONFIG_BUILD_ARM64_DT_OVERLAY=y HOSTCC=$clang HOSTAR=$x86_64_linux_ar HOSTLD=$x86_64_linux_ld ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_ REAL_CC=$MY_TOP_DIR/vendor/qcom/proprietary/llvm-arm-toolchain-ship/10.0/bin/clang CLANG_TRIPLE=aarch64-linux-gnu- defoldconfig
           
-          $make -j$(nproc) -C kernel/msm-4.19 'HOSTCFLAGS=-I$MY_TOP_DIR/kernel/msm-4.19/include/uapi -I/usr/include -I/usr/include/x86_64-linux-gnu -L/usr/lib -L/usr/lib/x86_64-linux-gnu -fuse-ld=lld' 'HOSTLDFLAGS=-L/usr/lib -L/usr/lib/x86_64-linux-gnu -fuse-ld=lld' ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_ O=$kernel_out_dir REAL_CC=$MY_TOP_DIR/vendor/qcom/proprietary/llvm-arm-toolchain-ship/10.0/bin/clang CLANG_TRIPLE=aarch64-linux-gnu- DTC_EXT=dtc DTC_OVERLAY_TEST_EXT=ufdt_apply_overlay CONFIG_BUILD_ARM64_DT_OVERLAY=y HOSTCC=$clang HOSTAR=$x86_64_linux_ar HOSTLD=$x86_64_linux_ld headers_install
+          # Instalação de Headers externos básicos
+          $make_bin -j$(nproc) -C kernel/msm-4.19 'HOSTCFLAGS=-I$MY_TOP_DIR/kernel/msm-4.19/include/uapi -I/usr/include -I/usr/include/x86_64-linux-gnu -L/usr/lib -L/usr/lib/x86_64-linux-gnu -fuse-ld=lld' 'HOSTLDFLAGS=-L/usr/lib -L/usr/lib/x86_64-linux-gnu -fuse-ld=lld' ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_ O=$kernel_out_dir REAL_CC=$MY_TOP_DIR/vendor/qcom/proprietary/llvm-arm-toolchain-ship/10.0/bin/clang CLANG_TRIPLE=aarch64-linux-gnu- DTC_EXT=dtc DTC_OVERLAY_TEST_EXT=ufdt_apply_overlay CONFIG_BUILD_ARM64_DT_OVERLAY=y HOSTCC=$clang HOSTAR=$x86_64_linux_ar HOSTLD=$x86_64_linux_ld headers_install
           
-          $make -j$(nproc) -C kernel/msm-4.19 ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_ 'HOSTCFLAGS=-I$MY_TOP_DIR/kernel/msm-4.19/include/uapi -I/usr/include -I/usr/include/x86_64-linux-gnu -L/usr/lib -L/usr/lib/x86_64-linux-gnu -fuse-ld=lld' 'HOSTLDFLAGS=-L/usr/lib -L/usr/lib/x86_64-linux-gnu -fuse-ld=lld' O=$kernel_out_dir REAL_CC=$MY_TOP_DIR/vendor/qcom/proprietary/llvm-arm-toolchain-ship/10.0/bin/clang CLANG_TRIPLE=aarch64-linux-gnu- DTC_EXT=dtc DTC_OVERLAY_TEST_EXT=ufdt_apply_overlay CONFIG_BUILD_ARM64_DT_OVERLAY=y HOSTCC=$clang HOSTAR=$x86_64_linux_ar HOSTLD=$x86_64_linux_ld
+          # Compilação principal da imagem do Kernel
+          $make_bin -j$(nproc) -C kernel/msm-4.19 ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_ 'HOSTCFLAGS=-I$MY_TOP_DIR/kernel/msm-4.19/include/uapi -I/usr/include -I/usr/include/x86_64-linux-gnu -L/usr/lib -L/usr/lib/x86_64-linux-gnu -fuse-ld=lld' 'HOSTLDFLAGS=-L/usr/lib -L/usr/lib/x86_64-linux-gnu -fuse-ld=lld' O=$kernel_out_dir REAL_CC=$MY_TOP_DIR/vendor/qcom/proprietary/llvm-arm-toolchain-ship/10.0/bin/clang CLANG_TRIPLE=aarch64-linux-gnu- DTC_EXT=dtc DTC_OVERLAY_TEST_EXT=ufdt_apply_overlay CONFIG_BUILD_ARM64_DT_OVERLAY=y HOSTCC=$clang HOSTAR=$x86_64_linux_ar HOSTLD=$x86_64_linux_ld
           
-          $make -j$(nproc) -C kernel/msm-4.19 O=$kernel_out_dir INSTALL_MOD_STRIP=1 INSTALL_MOD_PATH=$kernel_out_dir/repo/out/target/product/capri/obj/kernel/msm-4.19/staging REAL_CC=$MY_TOP_DIR/vendor/qcom/proprietary/llvm-arm-toolchain-ship/10.0/bin/clang CLANG_TRIPLE=aarch64-linux-gnu- DTC_EXT=dtc DTC_OVERLAY_TEST_EXT=ufdt_apply_overlay CONFIG_BUILD_ARM64_DT_OVERLAY=y HOSTCC=$clang HOSTAR=$x86_64_linux_ar HOSTLD=$x86_64_linux_ld modules_install
-          
-          make -C kernel/msm-4.19 O=$kernel_obj_out_dir ARCH=arm64 CROSS_COMPILE=$arm_eabi_ clean
-          make -C kernel/msm-4.19 O=$kernel_obj_out_dir ARCH=arm64 CROSS_COMPILE=$arm_eabi_ mrproper
-          make -C kernel/msm-4.19 O=$kernel_obj_out_dir ARCH=arm64 CROSS_COMPILE=$arm_eabi_ distclean
+          # Instalação de Módulos compilados internamente (.ko internos)
+          $make_bin -j$(nproc) -C kernel/msm-4.19 O=$kernel_out_dir INSTALL_MOD_STRIP=1 INSTALL_MOD_PATH=$kernel_out_dir/repo/out/target/product/capri/obj/kernel/msm-4.19/staging REAL_CC=$MY_TOP_DIR/vendor/qcom/proprietary/llvm-arm-toolchain-ship/10.0/bin/clang CLANG_TRIPLE=aarch64-linux-gnu- DTC_EXT=dtc DTC_OVERLAY_TEST_EXT=ufdt_apply_overlay CONFIG_BUILD_ARM64_DT_OVERLAY=y HOSTCC=$clang HOSTAR=$x86_64_linux_ar HOSTLD=$x86_64_linux_ld modules_install
 
       - name: Build WLAN Driver
         run: |
@@ -98,14 +92,15 @@ jobs:
           kernel_out_dir=$MY_TOP_DIR/out/target/product/generic/obj/kernel/msm-4.19 
           aarch64_linux_android_=$MY_TOP_DIR/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-
           clang=$MY_TOP_DIR/prebuilts/clang/host/linux-x86/clang-r383902b/bin/clang
+          make_bin=$MY_TOP_DIR/prebuilts/build-tools/linux-x86/bin/make
           
-          make -j$(nproc) -C kernel/msm-4.19 O=$kernel_out_dir M=$MY_TOP_DIR/vendor/qcom/opensource/wlan/qcacld-3.0 ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_ REAL_CC=$MY_TOP_DIR/vendor/qcom/proprietary/llvm-arm-toolchain-ship/10.0/bin/clang CLANG_TRIPLE=aarch64-linux-gnu- CONFIG_INPUT_MISC_FPC1020_SAVE_TO_CLASS_DEVICE=y CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME=ft8719 CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME=ft8719 CONFIG_INPUT_HIMAX_PANEL_NOTIFICATIONS=y CONFIG_INPUT_HIMAX_V2_MMI_IC_NAME=hx83102 CONFIG_INPUT_HIMAX_V2_MMI_IC_NAME=hx83112 CONFIG_INPUT_HIMAX_V2_MMI_IC_NAME_D=hx83102d CONFIG_INPUT_ILI_PANEL_NOTIFICATIONS=y CONFIG_ILITEK_RESUME_BY_DDI=y CONFIG_ILITEK_FW_PANEL=y CONFIG_ILITEK_ESD=y CONFIG_INPUT_ILI_PANEL_NOTIFICATIONS=y CONFIG_ILITEK_RESUME_BY_DDI=y CONFIG_INPUT_NOVA_PANEL_NOTIFICATIONS=y CONFIG_INPUT_NOVA_DRM_PANEL=y CONFIG_INPUT_NOVA_CHIP_VER_1=y CONFIG_NOVA_ESD_ENABLE=y CONFIG_NOVA_LCM_FAST_LIGHTUP=y CONFIG_DRM_DYNAMIC_REFRESH_RATE=y CONFIG_SX933X_USB_CAL=y CONFIG_SX933X_FLIP_CAL=y modules WLAN_ROOT=vendor/qcom/opensource/wlan/qcacld-3.0/ WLAN_COMMON_ROOT=../qca-wifi-host-cmn WLAN_COMMON_INC=vendor/qcom/opensource/wlan/qca-wifi-host-cmn WLAN_FW_API=vendor/qcom/opensource/wlan/fw-api WLAN_PROFILE=default DYNAMIC_SINGLE_CHIP= MODNAME=wlan BOARD_PLATFORM=bengal CONFIG_QCA_CLD_WLAN=m ANDROID_BUILD_TOP=$PWD
+          $make_bin -j$(nproc) -C kernel/msm-4.19 O=$kernel_out_dir M=$MY_TOP_DIR/vendor/qcom/opensource/wlan/qcacld-3.0 ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_ REAL_CC=$MY_TOP_DIR/vendor/qcom/proprietary/llvm-arm-toolchain-ship/10.0/bin/clang CLANG_TRIPLE=aarch64-linux-gnu- CONFIG_INPUT_MISC_FPC1020_SAVE_TO_CLASS_DEVICE=y CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME=ft8719 CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME=ft8719 CONFIG_INPUT_HIMAX_PANEL_NOTIFICATIONS=y CONFIG_INPUT_HIMAX_V2_MMI_IC_NAME=hx83102 CONFIG_INPUT_HIMAX_V2_MMI_IC_NAME=hx83112 CONFIG_INPUT_HIMAX_V2_MMI_IC_NAME_D=hx83102d CONFIG_INPUT_ILI_PANEL_NOTIFICATIONS=y CONFIG_ILITEK_RESUME_BY_DDI=y CONFIG_ILITEK_FW_PANEL=y CONFIG_ILITEK_ESD=y CONFIG_INPUT_ILI_PANEL_NOTIFICATIONS=y CONFIG_ILITEK_RESUME_BY_DDI=y CONFIG_INPUT_NOVA_PANEL_NOTIFICATIONS=y CONFIG_INPUT_NOVA_DRM_PANEL=y CONFIG_INPUT_NOVA_CHIP_VER_1=y CONFIG_NOVA_ESD_ENABLE=y CONFIG_NOVA_LCM_FAST_LIGHTUP=y CONFIG_DRM_DYNAMIC_REFRESH_RATE=y CONFIG_SX933X_USB_CAL=y CONFIG_SX933X_FLIP_CAL=y modules WLAN_ROOT=vendor/qcom/opensource/wlan/qcacld-3.0/ WLAN_COMMON_ROOT=../qca-wifi-host-cmn WLAN_COMMON_INC=vendor/qcom/opensource/wlan/qca-wifi-host-cmn WLAN_FW_API=vendor/qcom/opensource/wlan/fw-api WLAN_PROFILE=default DYNAMIC_SINGLE_CHIP= MODNAME=wlan BOARD_PLATFORM=bengal CONFIG_QCA_CLD_WLAN=m ANDROID_BUILD_TOP=$PWD
 
-      - name: Upload Build Artifacts
+      - name: Upload Kernel Image and Drivers
         uses: actions/upload-artifact@v4
         with:
-          name: Moto-G30-Kernel-Output
+          name: Moto-G30-Kernel-Package
           path: |
             ${{ env.MY_TOP_DIR }}/out/target/product/generic/obj/kernel/msm-4.19/arch/arm64/boot/Image.gz
             ${{ env.MY_TOP_DIR }}/out/target/product/generic/obj/kernel/msm-4.19/arch/arm64/boot/dtbo.img
-            ${{ env.MY_TOP_DIR }}/out/target/product/generic/obj/kernel/msm-4.19/**/*.ko
+            ${{ env.MY_TOP_DIR }}/vendor/qcom/opensource/wlan/qcacld-3.0/wlan.ko
