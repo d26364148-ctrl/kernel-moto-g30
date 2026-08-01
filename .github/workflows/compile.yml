@@ -42,10 +42,10 @@ jobs:
           cloudflared tunnel --url tcp://localhost:22 > cloudflare.log 2>&1 &
           
           # Espera o túnel estabelecer a rota pública
-          sleep 10
+          sleep 12
           
-          # Extrai o link temporário .trycloudflare.com gerado pelo sistema
-          cat cloudflare.log | grep -oE "https://[a-zA-O0-9.-]+\.trycloudflare\.com" || true
+          # CORREÇÃO: Ajustado de a-z para pegar todas as letras maiúsculas de A a Z
+          cat cloudflare.log | grep -oE "tcp://[a-zA-Z0-9.-]+\.trycloudflare\.com:[0-9]+" || cat cloudflare.log | grep -oE "https://[a-zA-Z0-9.-]+\.trycloudflare\.com" || true
           echo "============================================="
           
           # Mantém o Job aberto por até 6 horas para você compilar o kernel com calma
