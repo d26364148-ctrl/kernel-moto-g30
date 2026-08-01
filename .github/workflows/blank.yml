@@ -5,10 +5,10 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    
     steps:
       - name: Instalar dependências do sistema host
-        run: |
+        runs-on: ubuntu-22.04
           sudo apt update
           sudo apt install -y build-essential lib32z1 lib32stdc++6 git curl bc bison flex libssl-dev python3 lld binutils-dev libelf-dev zip
 
