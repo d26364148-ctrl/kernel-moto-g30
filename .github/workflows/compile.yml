@@ -29,10 +29,11 @@ jobs:
 
       - name: Download Prebuilts and Tools
         run: |
+          # Links corrigidos com o caminho completo do Google Source
           git clone --depth=1 https://googlesource.com $MY_TOP_DIR/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9
           git clone --depth=1 https://googlesource.com $MY_TOP_DIR/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8
           git clone --depth=1 https://googlesource.com $MY_TOP_DIR/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
-          git clone --depth=1 https://googlesource.com $MY_TOP_DIR/prebuilts/build-tools
+          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/build-tools $MY_TOP_DIR/prebuilts/build-tools
           
           mkdir -vp $MY_TOP_DIR/prebuilts/clang/host/linux-x86
           git clone --depth=1 https://googlesource.com $MY_TOP_DIR/prebuilts/clang/host/linux-x86/clang-r383902b
