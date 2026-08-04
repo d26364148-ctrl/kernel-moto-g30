@@ -1,4 +1,3 @@
-
 name: Conectar no Ubuntu via Cloudflare SSH
 
 on:
@@ -51,3 +50,4 @@ jobs:
           
           # Mantém o Job aberto por até 6 horas para você compilar o kernel com calma
           sleep 21600
+EOF
