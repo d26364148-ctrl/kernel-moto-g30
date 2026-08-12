@@ -18,7 +18,7 @@ jobs:
           remove-haskell: 'true'
           remove-codeql: 'true'
 
-      # 2. Atualiza e instala todas as dependências do sistema que você listou
+      # 2. Atualiza e instala todas as dependências do sistema necessárias
       - name: Install Dependencies
         run: |
           sudo apt update && sudo apt upgrade -y
@@ -29,7 +29,6 @@ jobs:
       - name: Clone Kernel Source
         run: |
           git clone https://github.com/LineageOS/android_kernel_motorola_sm6225 -b lineage-20 kernel_src
-          cd kernel_src
 
       # 4. Configura as variáveis de ambiente e executa a compilação
       - name: Build Kernel
@@ -39,13 +38,12 @@ jobs:
           # Defina variáveis básicas para usar o LLVM/Clang
           export ARCH=arm64
           export SUBARCH=arm64
-          export PATH="/usr/lib/llvm-18/bin:$PATH" # Ou a versão padrão do LLVM instalada
+          export PATH="/usr/lib/llvm-18/bin:$PATH"
           
-          # Defina a configuração padrão (defconfig) do dispositivo SM6225
-          # (Substitua 'bengal_defconfig' pelo arquivo correto na pasta arch/arm64/configs/ do seu kernel)
-          make O=out ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- bengal_defconfig
+          # Usa o defconfig correto da plataforma Bengal para a Motorola
+          make O=out ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- vendor/bengal-perf_defconfig
           
-          # Compila o kernel limitando as threads para evitar estouro de RAM (ex: -j4)
+          # Compila o kernel limitando as threads para evitar estouro de RAM (-j4)
           make O=out ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- -j4
 
       # 5. Compacta e envia o resultado (Image.gz) como artefato para você baixar
