@@ -1,39 +1,32 @@
-name: Android VM with Cloudflare Tunnel
+name: Ubuntu SSH with Cloudflare Tunnel
 
 on:
   workflow_dispatch:
 
 jobs:
-  android-vm:
-    runs-on: self-hosted   # precisa ser um runner com KVM habilitado
+  ssh-tunnel:
+    runs-on: ubuntu-22.04
     steps:
-      # 1. Instala QEMU/KVM e Cloudflared
-      - name: Install QEMU and Cloudflared
+      # 1. Instala servidor SSH e Cloudflared
+      - name: Install SSH and Cloudflared
         run: |
           sudo apt update
-          sudo apt install -y qemu-kvm libvirt-daemon-system virt-manager wget
+          sudo apt install -y openssh-server wget
           wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo apt install ./cloudflared-linux-amd64.deb
 
-      # 2. Baixa ISO do Android x86 4.0
-      - name: Download Android ISO
+      # 2. Configura SSH (gera chave e habilita login)
+      - name: Configure SSH
         run: |
-          curl -L -o android-x86.iso https://osdn.net/projects/android-x86/downloads/62310/android-x86-4.0-r1.iso
+          sudo systemctl enable ssh
+          sudo systemctl start ssh
+          # cria usuário temporário para acesso
+          sudo useradd -m ubuntuuser
+          echo "ubuntuuser:password123" | sudo chpasswd
 
-      # 3. Inicia VM com VNC habilitado em background
-      - name: Start Android VM
-        run: |
-          nohup qemu-system-x86_64 \
-            -enable-kvm \
-            -m 2048 \
-            -cdrom android-x86.iso \
-            -boot d \
-            -net nic -net user \
-            -vnc :1 > qemu.log 2>&1 &
-
-      # 4. Cria túnel Cloudflare para expor VNC (porta 5901)
+      # 3. Cria túnel Cloudflare para expor porta 22
       - name: Start Cloudflare Tunnel
         run: |
-          cloudflared tunnel create android-vm
-          cloudflared tunnel route dns android-vm androidvm.example.com
-          cloudflared tunnel --url tcp://localhost:5901 run android-vm
+          cloudflared tunnel create ubuntu-ssh
+          cloudflared tunnel route dns ubuntu-ssh ubuntu-ssh.example.com
+          cloudflared tunnel --url ssh://localhost:22 run ubuntu-ssh
