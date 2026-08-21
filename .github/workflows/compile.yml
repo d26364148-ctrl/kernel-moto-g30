@@ -4,24 +4,36 @@ on:
   workflow_dispatch:
 
 jobs:
-  tunnel:
-    runs-on: ubuntu-22.04
+  android-vm:
+    runs-on: self-hosted   # precisa ser um runner com KVM habilitado
     steps:
-      - name: Install Cloudflared
+      # 1. Instala QEMU/KVM e Cloudflared
+      - name: Install QEMU and Cloudflared
         run: |
-          curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
-          echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare.list
           sudo apt update
-          sudo apt install -y cloudflared
+          sudo apt install -y qemu-kvm libvirt-daemon-system virt-manager wget
+          wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo apt install ./cloudflared-linux-amd64.deb
 
-      - name: Verify Cloudflared
-        run: cloudflared --version
+      # 2. Baixa ISO do Android x86 4.0
+      - name: Download Android ISO
+        run: |
+          curl -L -o android-x86.iso https://osdn.net/projects/android-x86/downloads/62310/android-x86-4.0-r1.iso
 
-      - name: Create Tunnel
-        run: cloudflared tunnel create android-vm
+      # 3. Inicia VM com VNC habilitado
+      - name: Start Android VM
+        run: |
+          qemu-system-x86_64 \
+            -enable-kvm \
+            -m 2048 \
+            -cdrom android-x86.iso \
+            -boot d \
+            -net nic -net user \
+            -vnc :1 &
 
-      - name: Configure DNS
-        run: cloudflared tunnel route dns android-vm androidvm.example.com
-
-      - name: Run Tunnel
-        run: cloudflared tunnel run android-vm
+      # 4. Cria túnel Cloudflare para expor VNC (porta 5901)
+      - name: Start Cloudflare Tunnel
+        run: |
+          cloudflared tunnel create android-vm
+          cloudflared tunnel route dns android-vm androidvm.example.com
+          cloudflared tunnel --url vnc://localhost:5901 run android-vm
