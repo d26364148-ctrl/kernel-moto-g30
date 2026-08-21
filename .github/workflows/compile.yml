@@ -1,55 +1,27 @@
-name: Compile Android Kernel (SM6225)
+name: Android VM with Cloudflare Tunnel
 
 on:
-  workflow_dispatch: # Permite iniciar a compilação manualmente clicando em um botão no site do GitHub
+  workflow_dispatch:
 
 jobs:
-  build:
+  tunnel:
     runs-on: ubuntu-22.04
     steps:
-      # 1. Aumenta o espaço em disco do runner do GitHub (essencial para compilação de kernels)
-      - name: Maximize Build Space
-        uses: easimon/maximize-build-space@master
-        with:
-          root-reserve-mb: 16384
-          temp-reserve-mb: 8192
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
-          remove-codeql: 'true'
-
-      # 2. Atualiza e instala todas as dependências do sistema necessárias
-      - name: Install Dependencies
+      - name: Install Cloudflared
         run: |
-          sudo apt update && sudo apt upgrade -y
-          sudo apt install -y bc bison build-essential ccache curl flex git git-lfs gnupg gperf imagemagick liblz4-tool libncurses-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev device-tree-compiler python-is-python3
-          sudo apt install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi clang lld llvm
+          curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare.list
+          sudo apt update
+          sudo apt install -y cloudflared
 
-      # 3. Clona o código-fonte do kernel da LineageOS (branch lineage-20)
-      - name: Clone Kernel Source
-        run: |
-          git clone https://github.com/LineageOS/android_kernel_motorola_sm6225 -b lineage-20 kernel_src
+      - name: Verify Cloudflared
+        run: cloudflared --version
 
-      # 4. Configura as variáveis de ambiente e executa a compilação
-      - name: Build Kernel
-        run: |
-          cd kernel_src
-          
-          # Defina variáveis básicas para usar o LLVM/Clang
-          export ARCH=arm64
-          export SUBARCH=arm64
-          export PATH="/usr/lib/llvm-18/bin:$PATH"
-          
-          # Usa o defconfig correto da plataforma Bengal para a Motorola
-          make O=out ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- vendor/bengal-perf_defconfig
-          
-          # Compila o kernel limitando as threads para evitar estouro de RAM (-j4)
-          make O=out ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- -j4
+      - name: Create Tunnel
+        run: cloudflared tunnel create android-vm
 
-      # 5. Compacta e envia o resultado (Image.gz) como artefato para você baixar
-      - name: Upload Kernel Image Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: compiled-kernel-image
-          path: kernel_src/out/arch/arm64/boot/Image.gz
-          
+      - name: Configure DNS
+        run: cloudflared tunnel route dns android-vm androidvm.example.com
+
+      - name: Run Tunnel
+        run: cloudflared tunnel run android-vm
