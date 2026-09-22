@@ -21,11 +21,9 @@ jobs:
 
       - name: Relocate Apt Storage to Build Volume
         run: |
-          # Mover o cache e listas do apt para o disco grande de 102GB para evitar esgotar a raiz (/dev/root)
-          sudo mkdir -p /home/runner/work/apt/cache /home/runner/work/apt/lib
-          sudo cp -a /var/cache/apt/* /home/runner/work/apt/cache/ || true
-          sudo cp -a /var/lib/apt/* /home/runner/work/apt/lib/ || true
+          # Remover os diretórios da raiz cheia e redirecionar para o disco de 102GB
           sudo rm -rf /var/cache/apt /var/lib/apt
+          sudo mkdir -p /home/runner/work/apt/cache /home/runner/work/apt/lib
           sudo ln -s /home/runner/work/apt/cache /var/cache/apt
           sudo ln -s /home/runner/work/apt/lib /var/lib/apt
 
