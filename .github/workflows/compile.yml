@@ -39,8 +39,8 @@ jobs:
           echo "=== DADOS DE CONEXÃO DO CLOUDFLARE TUNNEL ==="
           cloudflared tunnel --url tcp://localhost:22 > cloudflare.log 2>&1 &
           
-          sleep 12
-          cat cloudflare.log | grep -oE "tcp://[a-zA-Z0-9.-]+\.trycloudflare\.com:[0-9]+" || true
+          sleep 15
+          cat cloudflare.log
           echo "============================================="
           
           sleep 21600
