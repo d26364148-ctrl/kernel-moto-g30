@@ -1,4 +1,4 @@
-name: Compilar Kernel Moto G30 via SSH
+name: Conectar no Ubuntu via Cloudflare SSH
 
 on:
   workflow_dispatch:
@@ -11,8 +11,8 @@ jobs:
       - name: Maximize Build Space
         uses: easimon/maximize-build-space@master
         with:
-          root-reserve-mb: 512
-          swap-size-mb: 512
+          root-reserve-mb: 1024
+          swap-size-mb: 1024
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
@@ -22,11 +22,11 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo5 libncurses5 lld llvm python3
+          sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo5 libncurses5 lld llvm
           
-          # Limpar o cache do apt para liberar espaço precioso na partição raiz
+          # Limpeza agressiva do apt para liberar mais espaço
           sudo apt-get clean
-          sudo rm -rf /var/lib/apt/lists/*
+          sudo rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
       - name: Configure SSH Server and Cloudflare Tunnel
         run: |
@@ -37,4 +37,22 @@ jobs:
           sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/g' /etc/ssh/sshd_config
           sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
           sudo systemctl restart ssh
+          
+          # 3. Baixar o executável oficial do Cloudflare Tunnel
+          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared-linux-amd64.deb
+          
+          # 4. Iniciar o túnel apontando para o serviço SSH (22)
+          echo "=== DADOS DE CONEXÃO DO CLOUDFLARE TUNNEL ==="
+          cloudflared tunnel --url ssh://localhost:22 > cloudflare.log 2>&1 &
+          
+          # Espera o túnel estabelecer a rota pública
+          sleep 12
+          
+          # Exibe o conteúdo completo do log para garantir que o link aparece visível
+          cat cloudflare.log
+          echo "============================================="
+          
+          # Mantém o Job aberto por até 6 horas para você compilar o kernel com calma
+          sleep 21600
           
