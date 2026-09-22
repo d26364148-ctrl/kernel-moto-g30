@@ -1,32 +1,47 @@
-name: Ubuntu SSH with Cloudflare Tunnel
+name: Compilar Kernel Moto G30 via SSH
 
 on:
   workflow_dispatch:
 
 jobs:
-  ssh-tunnel:
+  ssh-cloudflare:
     runs-on: ubuntu-22.04
+
     steps:
-      # 1. Instala servidor SSH e Cloudflared
-      - name: Install SSH and Cloudflared
-        run: |
-          sudo apt update
-          sudo apt install -y openssh-server wget
-          wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-          sudo apt install ./cloudflared-linux-amd64.deb
+      - name: Checkout do Repositório
+        uses: actions/checkout@v3
 
-      # 2. Configura SSH (gera chave e habilita login)
-      - name: Configure SSH
-        run: |
-          sudo systemctl enable ssh
-          sudo systemctl start ssh
-          # cria usuário temporário para acesso
-          sudo useradd -m ubuntuuser
-          echo "ubuntuuser:password123" | sudo chpasswd
+      - name: Maximize Build Space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 5120
+          swap-size-mb: 2048
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
 
-      # 3. Cria túnel Cloudflare para expor porta 22
-      - name: Start Cloudflare Tunnel
+      - name: Install Build Dependencies
         run: |
-          cloudflared tunnel create ubuntu-ssh
-          cloudflared tunnel route dns ubuntu-ssh ubuntu-ssh.example.com
-          cloudflared tunnel --url ssh://localhost:22 run ubuntu-ssh
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo5 libncurses5 lld llvm python3
+
+      - name: Configure SSH Server and Cloudflare Tunnel
+        run: |
+          echo "runner:moto30" | sudo chpasswd
+          sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+          sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+          sudo systemctl restart ssh
+          
+          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared-linux-amd64.deb
+          
+          echo "=== DADOS DE CONEXÃO DO CLOUDFLARE TUNNEL ==="
+          cloudflared tunnel --url tcp://localhost:22 > cloudflare.log 2>&1 &
+          
+          sleep 12
+          cat cloudflare.log | grep -oE "tcp://[a-zA-Z0-9.-]+\.trycloudflare\.com:[0-9]+" || true
+          echo "============================================="
+          
+          sleep 21600
+          
