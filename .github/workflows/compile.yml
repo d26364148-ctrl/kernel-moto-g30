@@ -19,14 +19,20 @@ jobs:
           remove-codeql: 'true'
           remove-docker-images: 'true'
 
+      - name: Relocate Apt Storage to Build Volume
+        run: |
+          # Mover o cache e listas do apt para o disco grande de 102GB para evitar esgotar a raiz (/dev/root)
+          sudo mkdir -p /home/runner/work/apt/cache /home/runner/work/apt/lib
+          sudo cp -a /var/cache/apt/* /home/runner/work/apt/cache/ || true
+          sudo cp -a /var/lib/apt/* /home/runner/work/apt/lib/ || true
+          sudo rm -rf /var/cache/apt /var/lib/apt
+          sudo ln -s /home/runner/work/apt/cache /var/cache/apt
+          sudo ln -s /home/runner/work/apt/lib /var/lib/apt
+
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo5 libncurses5 lld llvm
-          
-          # Limpeza agressiva do apt para liberar mais espaço
-          sudo apt-get clean
-          sudo rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
       - name: Configure SSH Server and Cloudflare Tunnel
         run: |
