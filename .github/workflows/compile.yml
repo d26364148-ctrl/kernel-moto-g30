@@ -1,7 +1,7 @@
-name: Ubuntu VM com Cloudflare Tunnel
+name: Ubuntu VM com SSH no Termux
 
 on:
-  workflow_dispatch: # Permite iniciar manualmente pela aba Actions
+  workflow_dispatch:
 
 jobs:
   start-vm:
@@ -11,29 +11,27 @@ jobs:
       - name: Checkout do código
         uses: actions/checkout@v4
 
-      - name: Configurar acesso SSH / Terminal local
+      - name: Configurar OpenSSH na VM
         run: |
           sudo apt-get update
-          sudo apt-get install -y ttyd tmux # Instala terminal web e gerenciador de sessão
-
-      - name: Instalar Cloudflare Tunnel (cloudflared)
-        run: |
-          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-          sudo dpkg -i cloudflared.deb
-
-      - name: Iniciar Túnel Cloudflare e Expor Serviço
-        run: |
-          # Exemplo abrindo um terminal web interativo (ttyd) na porta 7681
-          nohup ttyd -p 7681 bash > /dev/null 2>&1 &
+          sudo apt-get install -y openssh-server cloudflared
           
-          echo "=== INICIANDO TÚNEL CLOUDFLARE ==="
-          # Cria um túnel rápido e exibe a URL pública nos logs do GitHub Actions
-          cloudflared tunnel --url http://localhost:7681 &
+          # Definir uma palavra-passe simples para o utilizador runner (ex: 123456)
+          echo "runner:123456" | sudo chpasswd
+          
+          # Permitir autenticação por palavra-passe no SSH
+          sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo service ssh restart
+
+      - name: Iniciar Túnel SSH via Cloudflare
+        run: |
+          echo "=== INICIANDO TÚNEL CLOUDFLARE PARA SSH ==="
+          # Expõe a porta 22 (SSH)
+          cloudflared tunnel --url ssh://localhost:22 &
           sleep 5
 
       - name: Manter a VM Ativa
         run: |
-          echo "A VM está rodando! Acesse o link gerado pelo Cloudflare no log acima."
-          echo "Para encerrar a VM, cancele a execução do Workflow no GitHub."
-          # Mantém o Job rodando (limite máximo de 6 horas do GitHub Actions)
+          echo "VM pronta para ligação SSH!"
           sleep 21600
