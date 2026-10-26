@@ -14,9 +14,9 @@ jobs:
       - name: Configurar OpenSSH na VM
         run: |
           sudo apt-get update
-          sudo apt-get install -y openssh-server cloudflared
+          sudo apt-get install -y openssh-server curl
           
-          # Definir uma palavra-passe simples para o utilizador runner (ex: 123456)
+          # Definir a palavra-passe do utilizador runner como '123456'
           echo "runner:123456" | sudo chpasswd
           
           # Permitir autenticação por palavra-passe no SSH
@@ -24,10 +24,14 @@ jobs:
           sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
           sudo service ssh restart
 
+      - name: Instalar Cloudflare Tunnel (cloudflared)
+        run: |
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+
       - name: Iniciar Túnel SSH via Cloudflare
         run: |
           echo "=== INICIANDO TÚNEL CLOUDFLARE PARA SSH ==="
-          # Expõe a porta 22 (SSH)
           cloudflared tunnel --url ssh://localhost:22 &
           sleep 5
 
