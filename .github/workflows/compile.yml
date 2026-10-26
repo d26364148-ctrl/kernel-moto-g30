@@ -1,64 +1,39 @@
-name: Build bpftools archives
+name: Ubuntu VM com Cloudflare Tunnel
 
 on:
-  push:
-  pull_request:
+  workflow_dispatch: # Permite iniciar manualmente pela aba Actions
 
 jobs:
-  build_bpftools:
-    name: Build bpftools archive (${{ matrix.arch }})
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        arch: [arm64, x86_64]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: sudo ./scripts/jammy-install-deps.sh
-      - name: Setup NDK
-        run: ./scripts/download-ndk.sh
-      - name: Build
-        run: make bpftools NDK_PATH=`pwd`/android-ndk-r27b NDK_ARCH=${{ matrix.arch }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: bpftools-android-${{ matrix.arch }}.tar.gz
-          path: bpftools-${{ matrix.arch }}.tar.gz
+  start-vm:
+    runs-on: ubuntu-latest
 
-  build_bpftools_min:
-    name: Build bpftools-min archive (${{ matrix.arch }})
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        arch: [arm64, x86_64]
     steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: sudo ./scripts/jammy-install-deps.sh
-      - name: Setup NDK
-        run: ./scripts/download-ndk.sh
-      - name: Build
-        run: make bpftools-min NDK_PATH=`pwd`/android-ndk-r27b NDK_ARCH=${{ matrix.arch }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: bpftools-min-android-${{ matrix.arch }}.tar.gz
-          path: bpftools-min-${{ matrix.arch }}.tar.gz
+      - name: Checkout do código
+        uses: actions/checkout@v4
 
-  build_bpftrace_static:
-    name: Build static bpftrace binaries (${{ matrix.arch }})
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        arch: [arm64, x86_64, armv7]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: sudo ./scripts/jammy-install-deps.sh
-      - name: Setup NDK
-        run: ./scripts/download-ndk.sh
-      - name: Build
-        run: make bpftrace NDK_PATH=`pwd`/android-ndk-r27b NDK_ARCH=${{ matrix.arch }} STATIC_LINKING=true LLVM_BPF_ONLY=true
-      - uses: actions/upload-artifact@v4
-        with:
-          name: bpftrace-android-${{ matrix.arch }}
-          path: out/android/${{ matrix.arch }}/bin/bpftrace
+      - name: Configurar acesso SSH / Terminal local
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ttyd tmux # Instala terminal web e gerenciador de sessão
+
+      - name: Instalar Cloudflare Tunnel (cloudflared)
+        run: |
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+
+      - name: Iniciar Túnel Cloudflare e Expor Serviço
+        run: |
+          # Exemplo abrindo um terminal web interativo (ttyd) na porta 7681
+          nohup ttyd -p 7681 bash > /dev/null 2>&1 &
           
+          echo "=== INICIANDO TÚNEL CLOUDFLARE ==="
+          # Cria um túnel rápido e exibe a URL pública nos logs do GitHub Actions
+          cloudflared tunnel --url http://localhost:7681 &
+          sleep 5
+
+      - name: Manter a VM Ativa
+        run: |
+          echo "A VM está rodando! Acesse o link gerado pelo Cloudflare no log acima."
+          echo "Para encerrar a VM, cancele a execução do Workflow no GitHub."
+          # Mantém o Job rodando (limite máximo de 6 horas do GitHub Actions)
+          sleep 21600
