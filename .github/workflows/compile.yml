@@ -1,41 +1,47 @@
-name: Ubuntu VM com SSH no Termux
+name: Cross-Compile Clang for ARM64
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Permite iniciar a compilação manualmente pelo celular
 
 jobs:
-  start-vm:
+  build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout do código
-        uses: actions/checkout@v4
-
-      - name: Configurar OpenSSH na VM
+      - name: Baixar ferramentas essenciais
         run: |
           sudo apt-get update
-          sudo apt-get install -y openssh-server curl
-          
-          # Definir a palavra-passe do utilizador runner como '123456'
-          echo "runner:123456" | sudo chpasswd
-          
-          # Permitir autenticação por palavra-passe no SSH
-          sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-          sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
-          sudo service ssh restart
+          sudo apt-get install -y cmake ninja-build python3 git build-essential gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
-      - name: Instalar Cloudflare Tunnel (cloudflared)
+      - name: Clonar código fonte do LLVM/Clang (Exemplo LLVM 18/19)
         run: |
-          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-          sudo dpkg -i cloudflared.deb
+          git clone --depth 1 https://github.com/llvm/llvm-project.git
 
-      - name: Iniciar Túnel SSH via Cloudflare
+      - name: Configurar CMake para Compilação Cruzada ARM64
         run: |
-          echo "=== INICIANDO TÚNEL CLOUDFLARE PARA SSH ==="
-          cloudflared tunnel --url ssh://localhost:22 &
-          sleep 5
+          mkdir build && cd build
+          cmake -G Ninja ../llvm-project/llvm \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
+            -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
+            -DLLVM_TARGET_ARCH=AArch64 \
+            -DLLVM_TARGETS_TO_BUILD="AArch64" \
+            -DLLVM_ENABLE_PROJECTS="clang" \
+            -DLLVM_INCLUDE_TESTS=OFF \
+            -DLLVM_INCLUDE_EXAMPLES=OFF
 
-      - name: Manter a VM Ativa
+      - name: Executar a Compilação (Ninja)
         run: |
-          echo "VM pronta para ligação SSH!"
-          sleep 21600
+          cd build
+          ninja clang
+
+      - name: Compactar o Binário Gerado
+        run: |
+          mkdir -p output/bin
+          cp build/bin/clang output/bin/
+          tar -czvf clang-arm64-android.tar.gz -C output .
+
+      - name: Enviar Artefato para Download
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-arm64-binario
+          path: clang-arm64-android.tar.gz
