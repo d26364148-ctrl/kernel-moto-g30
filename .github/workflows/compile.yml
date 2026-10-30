@@ -1,47 +1,101 @@
-name: Cross-Compile Clang for ARM64
+name: Build Moto G30 Kernel (RRCS31)
 
 on:
-  workflow_dispatch: # Permite iniciar a compilação manualmente pelo celular
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
-      - name: Baixar ferramentas essenciais
+      - name: Instalar Dependências do Sistema
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build python3 git build-essential gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf imagemagick lib32ncurses5-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc yasm zlib1g-dev python3 make cmake ninja-build wget unzip
 
-      - name: Clonar código fonte do LLVM/Clang (Exemplo LLVM 18/19)
+      - name: Baixar Prebuilts da Google e Motorola
         run: |
-          git clone --depth 1 https://github.com/llvm/llvm-project.git
+          export my_top_dir=$PWD
 
-      - name: Configurar CMake para Compilação Cruzada ARM64
+          echo "--- Baixando aarch64-linux-android-4.9 ---"
+          mkdir -vp $my_top_dir/prebuilts/gcc/linux-x86/aarch64
+          cd $my_top_dir/prebuilts/gcc/linux-x86/aarch64
+          git clone --depth 1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9
+
+          echo "--- Baixando arm-eabi-4.8 ---"
+          mkdir -vp $my_top_dir/prebuilts/gcc/linux-x86/arm
+          cd $my_top_dir/prebuilts/gcc/linux-x86/arm
+          git clone --depth 1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8
+
+          echo "--- Baixando Clang do Host ---"
+          mkdir -vp $my_top_dir/prebuilts/clang/host/linux-x86
+          cd $my_top_dir/prebuilts/clang/host/linux-x86
+          git clone --depth 1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86
+
+          echo "--- Baixando GCC Glibc 2.17 ---"
+          mkdir -vp $my_top_dir/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
+          cd $my_top_dir/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
+          git clone --depth 1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
+
+      - name: Baixar e Extrair Código-Fonte do Kernel Motorola
         run: |
-          mkdir build && cd build
-          cmake -G Ninja ../llvm-project/llvm \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
-            -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
-            -DLLVM_TARGET_ARCH=AArch64 \
-            -DLLVM_TARGETS_TO_BUILD="AArch64" \
-            -DLLVM_ENABLE_PROJECTS="clang" \
-            -DLLVM_INCLUDE_TESTS=OFF \
-            -DLLVM_INCLUDE_EXAMPLES=OFF
+          export my_top_dir=$PWD
+          cd $my_top_dir
+          
+          wget https://github.com/MotorolaMobilityLLC/kernel-msm/archive/refs/tags/MMI-RRCS31.Q1-3-68-4.zip
+          unzip -q MMI-RRCS31.Q1-3-68-4.zip
+          
+          # Renomear e organizar para a estrutura esperada pelo script
+          mkdir -p kernel
+          mv kernel-msm-MMI-RRCS31.Q1-3-68-4 kernel/msm-4.19
 
-      - name: Executar a Compilação (Ninja)
+      - name: Executar Compilação do Kernel e Módulos
         run: |
-          cd build
-          ninja clang
+          export my_top_dir=$PWD
+          export kernel_out_dir=$my_top_dir/out/target/product/generic/obj/kernel/msm-4.19
+          export kernel_obj_out_dir=$my_top_dir/out/target/product/generic/obj/KERNEL_OBJ
 
-      - name: Compactar o Binário Gerado
+          mkdir -p $kernel_out_dir
+
+          export make=$my_top_dir/prebuilts/build-tools/linux-x86/bin/make
+          export aarch64_linux_android_=$my_top_dir/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-
+          export x86_64_linux_ar=$my_top_dir/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/bin/x86_64-linux-ar
+          export x86_64_linux_ld=$my_top_dir/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/bin/x86_64-linux-ld
+          export clang=$my_top_dir/prebuilts/clang/host/linux-x86/clang-r383902b/bin/clang
+          export arm_eabi_=$my_top_dir/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8/bin/arm-eabi-
+          export lld=$my_top_dir/prebuilts/clang/host/linux-x86/clang-r383902b/bin/ld.lld
+
+          # Gerar arquivo .config unindo os defconfigs
+          cat kernel/msm-4.19/arch/arm64/configs/vendor/bengal-perf_defconfig \
+              kernel/msm-4.19/arch/arm64/configs/vendor/ext_config/moto-bengal.config \
+              kernel/msm-4.19/arch/arm64/configs/vendor/ext_config/caprip-default.config \
+              kernel/msm-4.19/arch/arm64/configs/vendor/debugfs.config > $kernel_out_dir/.config
+
+          # Corrigir Makefile do DTS
+          sed -i -E 's/(apq[a-zA-Z0-9-]*|msm89[a-zA-Z0-9-]*)\.dtb//g' kernel/msm-4.19/arch/arm64/boot/dts/qcom/Makefile
+
+          # Compilação (usando -j4 para evitar sobrecarga na VM do GitHub, ou -j$(nproc))
+          make -j$(nproc) -C kernel/msm-4.19 O=$kernel_out_dir DTC_EXT=dtc DTC_OVERLAY_TEST_EXT=ufdt_apply_overlay CONFIG_BUILD_ARM64_DT_OVERLAY=y HOSTCC=$clang HOSTAR=$x86_64_linux_ar HOSTLD=$x86_64_linux_ld ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_ REAL_CC=$clang CLANG_TRIPLE=aarch64-linux-gnu- LD=$lld defoldconfig
+
+          make -j$(nproc) -C kernel/msm-4.19 'HOSTCFLAGS=-I$my_top_dir/kernel/msm-4.19/include/uapi -I/usr/include -I/usr/include/x86_64-linux-gnu -L/usr/lib -L/usr/lib/x86_64-linux-gnu -fuse-ld=lld' 'HOSTLDFLAGS=-L/usr/lib -L/usr/lib/x86_64-linux-gnu -fuse-ld=lld' ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_ O=$kernel_out_dir REAL_CC=$clang CLANG_TRIPLE=aarch64-linux-gnu- LD=$lld DTC_EXT=dtc DTC_OVERLAY_TEST_EXT=ufdt_apply_overlay CONFIG_BUILD_ARM64_DT_OVERLAY=y HOSTCC=$clang HOSTAR=$x86_64_linux_ar HOSTLD=$x86_64_linux_ld headers_install
+
+          make -j$(nproc) -C kernel/msm-4.19 ARCH=arm64 CROSS_COMPILE=$aarch64_linux_android_ 'HOSTCFLAGS=-I$my_top_dir/kernel/msm-4.19/include/uapi -I/usr/include -I/usr/include/x86_64-linux-gnu -L/usr/lib -L/usr/lib/x86_64-linux-gnu -fuse-ld=lld' 'HOSTLDFLAGS=-L/usr/lib -L/usr/lib/x86_64-linux-gnu -fuse-ld=lld' O=$kernel_out_dir REAL_CC=$clang CLANG_TRIPLE=aarch64-linux-gnu- LD=$lld DTC_EXT=dtc DTC_OVERLAY_TEST_EXT=ufdt_apply_overlay CONFIG_BUILD_ARM64_DT_OVERLAY=y HOSTCC=$clang HOSTAR=$x86_64_linux_ar HOSTLD=$x86_64_linux_ld
+
+          make -j$(nproc) -C kernel/msm-4.19 O=$kernel_out_dir INSTALL_MOD_STRIP=1 INSTALL_MOD_PATH=$kernel_out_dir/repo/out/target/product/capri/obj/kernel/msm-4.19/staging REAL_CC=$clang CLANG_TRIPLE=aarch64-linux-gnu- LD=$lld DTC_EXT=dtc DTC_OVERLAY_TEST_EXT=ufdt_apply_overlay CONFIG_BUILD_ARM64_DT_OVERLAY=y HOSTCC=$clang HOSTAR=$x86_64_linux_ar HOSTLD=$x86_64_linux_ld modules_install
+
+      - name: Compilar Driver WLAN (qcacld-3.0)
         run: |
-          mkdir -p output/bin
-          cp build/bin/clang output/bin/
-          tar -czvf clang-arm64-android.tar.gz -C output .
+          export my_top_dir=$PWD
+          export short_top=/tmp/k_wlan
+          export short_out=$short_top/out/target/product/generic/obj/kernel/msm-4.19
 
-      - name: Enviar Artefato para Download
+          ln -sfn $my_top_dir $short_top
+
+          make -j$(nproc) -C $short_top/kernel/msm-4.19 O=$short_out M=$short_top/kernel/msm-4.19/vendor/qcom/opensource/wlan/qcacld-3.0 ARCH=arm64 CROSS_COMPILE=$short_top/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android- REAL_CC=$short_top/prebuilts/clang/host/linux-x86/clang-r383902b/bin/clang CLANG_TRIPLE=aarch64-linux-gnu- modules WLAN_ROOT=vendor/qcom/opensource/wlan/qcacld-3.0/ WLAN_COMMON_ROOT=../qca-wifi-host-cmn WLAN_COMMON_INC=vendor/qcom/opensource/wlan/qca-wifi-host-cmn WLAN_FW_API=vendor/qcom/opensource/wlan/fw-api WLAN_PROFILE=default DYNAMIC_SINGLE_CHIP= MODNAME=wlan BOARD_PLATFORM=bengal CONFIG_QCA_CLD_WLAN=m ANDROID_BUILD_TOP=$short_top || true
+
+      - name: Enviar Imagem e Módulos como Artefato
         uses: actions/upload-artifact@v4
         with:
-          name: clang-arm64-binario
-          path: clang-arm64-android.tar.gz
+          name: moto-g30-kernel-binarios
+          path: |
+            out/target/product/generic/obj/kernel/msm-4.19/arch/arm64/boot/Image
+            out/target/product/generic/obj/kernel/msm-4.19/arch/arm64/boot/dtbo.img
